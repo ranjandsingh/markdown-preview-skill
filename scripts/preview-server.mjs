@@ -3,7 +3,7 @@
 // (SSE + watcher: Task 5. Idle-shutdown: Task 6. CLI entry: Task 7.)
 
 import http from "node:http";
-import { readFileSync, realpathSync } from "node:fs";
+import { readFileSync, realpathSync, watch } from "node:fs";
 import { resolve, sep } from "node:path";
 import { renderShell } from "./render.mjs";
 import { resolveWatchDirs, newestWatched, listWatched } from "./watched.mjs";
@@ -52,12 +52,40 @@ export function createPreviewServer({ root, port = 7437, idleMs = 60_000 }) {
         return json(res, 200, { file: file.replace(root + sep, ""), markdown: readFileSync(file, "utf8") });
       } catch { return json(res, 404, { error: "unreadable" }); }
     }
+    if (url.pathname === "/events") {
+      res.writeHead(200, {
+        "content-type": "text/event-stream",
+        "cache-control": "no-cache",
+        connection: "keep-alive",
+      });
+      res.write("event: ready\ndata: {}\n\n");
+      clients.add(res);
+      req.on("close", () => { clients.delete(res); });
+      return;
+    }
     res.writeHead(404); res.end();
   });
 
+  function broadcast() {
+    const best = newestWatched(root);
+    const payload = JSON.stringify({ file: best ? best.path.replace(root + sep, "") : null });
+    for (const res of clients) res.write(`event: update\ndata: ${payload}\n\n`);
+  }
+
+  let debounce = null;
+  const watchers = resolveWatchDirs(root).map(dir => {
+    try {
+      return watch(dir, { recursive: true }, () => {
+        clearTimeout(debounce);
+        debounce = setTimeout(broadcast, 120);
+      });
+    } catch { return null; }
+  }).filter(Boolean);
+
   return new Promise((res) => {
     server.listen(port, "127.0.0.1", () => {
-      res({ server, port: server.address().port, clients, close: () => new Promise(r => server.close(r)) });
+      res({ server, port: server.address().port, clients,
+        close: () => new Promise(r => { watchers.forEach(w => w.close()); server.close(r); }) });
     });
   });
 }

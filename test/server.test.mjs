@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import { createPreviewServer } from "../scripts/preview-server.mjs";
 
 function fixture() {
@@ -61,5 +62,32 @@ test("GET /raw rejects an existing file outside the watch dirs", async () => {
   const { srv, base } = await start(fixture());
   const r = await fetch(base + "/raw?f=" + encodeURIComponent(secret)); // absolute path, real file
   assert.equal(r.status, 403);
+  await srv.close();
+});
+
+test("editing a watched file pushes an SSE update", async () => {
+  const root = fixture();
+  const srv = await createPreviewServer({ root, port: 0, idleMs: 50_000 });
+  const base = `http://127.0.0.1:${srv.port}`;
+
+  const events = [];
+  const ac = new AbortController();
+  const stream = await fetch(base + "/events", { signal: ac.signal, headers: { accept: "text/event-stream" } });
+  const reader = stream.body.getReader();
+  const pump = (async () => {
+    const dec = new TextDecoder();
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      events.push(dec.decode(value));
+    }
+  })();
+
+  await sleep(100);
+  writeFileSync(join(root, "docs", "adr", "0002.md"), "# New ADR");
+  await sleep(400);
+  ac.abort();
+  await pump.catch(() => {});
+  assert.ok(events.join("").includes("event: update"));
   await srv.close();
 });
