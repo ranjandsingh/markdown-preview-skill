@@ -53,3 +53,13 @@ test("GET /raw rejects paths outside watch dirs", async () => {
   assert.equal(r.status, 403);
   await srv.close();
 });
+
+test("GET /raw rejects an existing file outside the watch dirs", async () => {
+  const outside = mkdtempSync(join(tmpdir(), "outside-"));
+  const secret = join(outside, "secret.md");
+  writeFileSync(secret, "# secret");
+  const { srv, base } = await start(fixture());
+  const r = await fetch(base + "/raw?f=" + encodeURIComponent(secret)); // absolute path, real file
+  assert.equal(r.status, 403);
+  await srv.close();
+});

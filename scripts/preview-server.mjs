@@ -30,8 +30,10 @@ export function createPreviewServer({ root, port = 7437, idleMs = 60_000 }) {
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, "http://127.0.0.1");
     if (url.pathname === "/") {
-      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-      return res.end(renderShell());
+      try {
+        res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+        return res.end(renderShell());
+      } catch { return json(res, 500, { error: "render failed" }); }
     }
     if (url.pathname === "/health") return json(res, 200, { clients: clients.size });
     if (url.pathname === "/list") return json(res, 200, listWatched(root));
