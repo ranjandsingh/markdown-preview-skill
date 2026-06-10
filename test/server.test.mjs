@@ -65,6 +65,15 @@ test("GET /raw rejects an existing file outside the watch dirs", async () => {
   await srv.close();
 });
 
+test("server exits (via onIdleExit) after idle grace with no clients", async () => {
+  const root = fixture();
+  let exited = false;
+  const srv = await createPreviewServer({ root, port: 0, idleMs: 150, onIdleExit: () => { exited = true; } });
+  await sleep(300);
+  assert.equal(exited, true);
+  await srv.close();
+});
+
 test("editing a watched file pushes an SSE update", async () => {
   const root = fixture();
   const srv = await createPreviewServer({ root, port: 0, idleMs: 50_000 });

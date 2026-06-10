@@ -24,8 +24,20 @@ function withinWatchDirs(root, target) {
   });
 }
 
-export function createPreviewServer({ root, port = 7437, idleMs = 60_000 }) {
+export function createPreviewServer({
+  root,
+  port = 7437,
+  idleMs = Number(process.env.PREVIEW_IDLE_MS) || 60_000,
+  onIdleExit = () => process.exit(0),
+}) {
   const clients = new Set();
+
+  // Self-shutdown: once the last tab disconnects, exit after `idleMs` so no orphan lingers.
+  let idleTimer = null;
+  function armIdle() {
+    clearTimeout(idleTimer);
+    if (clients.size === 0) idleTimer = setTimeout(() => { if (clients.size === 0) onIdleExit(); }, idleMs);
+  }
 
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, "http://127.0.0.1");
@@ -59,9 +71,11 @@ export function createPreviewServer({ root, port = 7437, idleMs = 60_000 }) {
         connection: "keep-alive",
       });
       res.write("event: ready\ndata: {}\n\n");
+      clearTimeout(idleTimer);
       clients.add(res);
-      res.on("error", () => clients.delete(res));
-      req.on("close", () => { clients.delete(res); });
+      const drop = () => { clients.delete(res); armIdle(); };
+      res.on("error", drop);
+      req.on("close", drop);
       return;
     }
     res.writeHead(404); res.end();
@@ -100,8 +114,10 @@ export function createPreviewServer({ root, port = 7437, idleMs = 60_000 }) {
 
   return new Promise((res) => {
     server.listen(port, "127.0.0.1", () => {
+      armIdle();
       res({ server, port: server.address().port, clients,
         close: () => new Promise(r => {
+          clearTimeout(idleTimer);
           clearTimeout(debounce);
           if (pollTimer) clearInterval(pollTimer);
           watchers.forEach(w => w.close());
