@@ -5,3 +5,6 @@ node_modules/
 # Local-only planning artifacts — design specs and plans are working docs, never committed
 docs/superpowers/specs/
 docs/superpowers/plans/
+
+# Live preview server runtime marker
+.preview-server.json
