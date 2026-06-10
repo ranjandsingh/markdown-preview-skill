@@ -2,12 +2,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, sep } from "node:path";
+import { join, sep, dirname } from "node:path";
 import { resolveWatchDirs, newestWatched, listWatched } from "../scripts/watched.mjs";
 
 function tmpRoot() { return mkdtempSync(join(tmpdir(), "mp-")); }
 function write(p, body, mtime) {
-  mkdirSync(join(p, ".."), { recursive: true });
+  mkdirSync(dirname(p), { recursive: true });
   writeFileSync(p, body ?? "# x");
   if (mtime) utimesSync(p, mtime, mtime);
 }
@@ -31,9 +31,21 @@ test("env var extends the set", () => {
   const root = tmpRoot();
   writeFileSync(join(root, ".markdown-preview.json"), JSON.stringify({ watch: ["a"] }));
   process.env.MARKDOWN_PREVIEW_WATCH = "c,d";
-  const dirs = resolveWatchDirs(root);
-  delete process.env.MARKDOWN_PREVIEW_WATCH;
-  assert.ok(dirs.some(d => d.endsWith("c")) && dirs.some(d => d.endsWith("d")) && dirs.some(d => d.endsWith("a")));
+  try {
+    const dirs = resolveWatchDirs(root);
+    assert.ok(dirs.some(d => d.endsWith("c")) && dirs.some(d => d.endsWith("d")) && dirs.some(d => d.endsWith("a")));
+  } finally {
+    delete process.env.MARKDOWN_PREVIEW_WATCH;
+  }
+});
+
+test("malformed config falls back to defaults", () => {
+  for (const body of ['not json', '{}', '{"watch":"string"}', '{"watch":null}']) {
+    const root = tmpRoot();
+    writeFileSync(join(root, ".markdown-preview.json"), body);
+    const dirs = resolveWatchDirs(root);
+    assert.ok(dirs.some(d => d.endsWith(join("docs", "adr"))), `fallback for: ${body}`);
+  }
 });
 
 test("newestWatched finds the most recent .md recursively", () => {

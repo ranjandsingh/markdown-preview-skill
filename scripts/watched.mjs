@@ -38,6 +38,8 @@ function* walkMd(dir) {
   try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return; }
   for (const e of entries) {
     const full = join(dir, e.name);
+    // Symlinked dirs are intentionally not followed: isDirectory() is false for
+    // symlinks (they report as isSymbolicLink()), avoiding loops and out-of-tree escapes.
     if (e.isDirectory()) yield* walkMd(full);
     else if (e.name.toLowerCase().endsWith(".md")) yield full;
   }
