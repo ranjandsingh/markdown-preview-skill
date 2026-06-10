@@ -1,3 +1,7 @@
 .last-open.json
 node_modules/
 *.preview.html
+
+# Local-only planning artifacts — design specs and plans are working docs, never committed
+docs/superpowers/specs/
+docs/superpowers/plans/
