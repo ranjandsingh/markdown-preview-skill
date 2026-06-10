@@ -1,0 +1,21 @@
+# Changelog
+
+All notable changes to this skill are documented here. This project adheres to
+[Semantic Versioning](https://semver.org/).
+
+## [0.2.0] — 2026-06-11
+### Changed
+- Replaced the static `file://` snapshot with an offline `127.0.0.1` live-reload server.
+  A single browser tab now updates **in place** over SSE and follows the newest watched doc,
+  instead of opening a new tab with a frozen render each turn.
+
+### Added
+- Configurable watch folders via `.markdown-preview.json` (defaults: `docs/superpowers/specs`,
+  `docs/superpowers/plans`, `docs/adr`); `MARKDOWN_PREVIEW_WATCH` env extends the set.
+- Filebar file picker and `?file=` pin; in-place Mermaid re-render with scroll preserved.
+- Idle-shutdown: the server exits ~60s after the last tab disconnects (self-cleaning).
+- Distribution as a Claude Code plugin + single-plugin marketplace (ships the Stop hook).
+
+## [0.1.0]
+- Initial skill: offline Markdown → browser renderer (GitHub dark theme + vendored Mermaid),
+  with a Stop hook that opened the just-edited spec/plan as a static page.
