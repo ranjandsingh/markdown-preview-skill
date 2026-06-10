@@ -83,9 +83,12 @@ test("editing a watched file pushes an SSE update", async () => {
     }
   })();
 
-  await sleep(100);
+  await sleep(50);
   writeFileSync(join(root, "docs", "adr", "0002.md"), "# New ADR");
-  await sleep(400);
+  const deadline = Date.now() + 2000;
+  while (Date.now() < deadline && !events.join("").includes("event: update")) {
+    await sleep(50);
+  }
   ac.abort();
   await pump.catch(() => {});
   assert.ok(events.join("").includes("event: update"));

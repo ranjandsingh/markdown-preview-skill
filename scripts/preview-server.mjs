@@ -60,6 +60,7 @@ export function createPreviewServer({ root, port = 7437, idleMs = 60_000 }) {
       });
       res.write("event: ready\ndata: {}\n\n");
       clients.add(res);
+      res.on("error", () => clients.delete(res));
       req.on("close", () => { clients.delete(res); });
       return;
     }
@@ -69,23 +70,46 @@ export function createPreviewServer({ root, port = 7437, idleMs = 60_000 }) {
   function broadcast() {
     const best = newestWatched(root);
     const payload = JSON.stringify({ file: best ? best.path.replace(root + sep, "") : null });
-    for (const res of clients) res.write(`event: update\ndata: ${payload}\n\n`);
+    for (const res of clients) {
+      if (res.destroyed || !res.writable) { clients.delete(res); continue; }
+      try { res.write(`event: update\ndata: ${payload}\n\n`); } catch { clients.delete(res); }
+    }
   }
 
   let debounce = null;
-  const watchers = resolveWatchDirs(root).map(dir => {
+  const scheduleBroadcast = () => { clearTimeout(debounce); debounce = setTimeout(broadcast, 120); };
+
+  // Prefer native recursive fs.watch (Windows/macOS). Where it's unsupported (Linux throws
+  // ERR_FEATURE_UNAVAILABLE_ON_PLATFORM), fall back to a 1s mtime-poll so live-reload still works.
+  let pollTimer = null;
+  const watchers = [];
+  for (const dir of resolveWatchDirs(root)) {
     try {
-      return watch(dir, { recursive: true }, () => {
-        clearTimeout(debounce);
-        debounce = setTimeout(broadcast, 120);
-      });
-    } catch { return null; }
-  }).filter(Boolean);
+      watchers.push(watch(dir, { recursive: true }, scheduleBroadcast));
+    } catch {
+      if (!pollTimer) {
+        let last = newestWatched(root)?.mtime ?? 0;
+        pollTimer = setInterval(() => {
+          const m = newestWatched(root)?.mtime ?? 0;
+          if (m > last) { last = m; broadcast(); }
+        }, 1000);
+        pollTimer.unref?.();
+      }
+    }
+  }
 
   return new Promise((res) => {
     server.listen(port, "127.0.0.1", () => {
       res({ server, port: server.address().port, clients,
-        close: () => new Promise(r => { watchers.forEach(w => w.close()); server.close(r); }) });
+        close: () => new Promise(r => {
+          clearTimeout(debounce);
+          if (pollTimer) clearInterval(pollTimer);
+          watchers.forEach(w => w.close());
+          for (const c of clients) { try { c.end(); } catch { /* ignore */ } }
+          clients.clear();
+          server.closeAllConnections?.();
+          server.close(r);
+        }) });
     });
   });
 }
