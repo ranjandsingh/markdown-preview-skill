@@ -3,8 +3,9 @@
 // (SSE + watcher: Task 5. Idle-shutdown: Task 6. CLI entry: Task 7.)
 
 import http from "node:http";
-import { readFileSync, realpathSync, watch } from "node:fs";
-import { resolve, sep } from "node:path";
+import { readFileSync, realpathSync, watch, writeFileSync } from "node:fs";
+import { resolve, sep, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { renderShell } from "./render.mjs";
 import { resolveWatchDirs, newestWatched, listWatched } from "./watched.mjs";
 
@@ -112,8 +113,10 @@ export function createPreviewServer({
     }
   }
 
-  return new Promise((res) => {
+  return new Promise((res, rej) => {
+    server.once("error", rej);
     server.listen(port, "127.0.0.1", () => {
+      server.removeListener("error", rej);
       armIdle();
       res({ server, port: server.address().port, clients,
         close: () => new Promise(r => {
@@ -128,4 +131,23 @@ export function createPreviewServer({
         }) });
     });
   });
+}
+
+const SKILL_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+export const MARKER = resolve(SKILL_DIR, ".preview-server.json");
+export const PORTS = [7437, 7438, 7439, 7440];
+
+async function tryListen(root, port) {
+  try { return await createPreviewServer({ root, port }); }
+  catch (e) { if (e && e.code === "EADDRINUSE") return null; throw e; }
+}
+
+// Run directly:  node scripts/preview-server.mjs [root]
+if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
+  const root = process.argv[2] ? resolve(process.argv[2]) : process.cwd();
+  let srv = null;
+  for (const p of PORTS) { srv = await tryListen(root, p); if (srv) break; }
+  if (!srv) { console.error("No free preview port"); process.exit(1); }
+  writeFileSync(MARKER, JSON.stringify({ port: srv.port, pid: process.pid, root }));
+  console.log(`Preview server on http://localhost:${srv.port} (watching ${root})`);
 }

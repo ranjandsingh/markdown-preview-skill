@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
-import { createPreviewServer } from "../scripts/preview-server.mjs";
+import { createPreviewServer, PORTS, MARKER } from "../scripts/preview-server.mjs";
 
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), "mps-"));
@@ -63,6 +63,20 @@ test("GET /raw rejects an existing file outside the watch dirs", async () => {
   const r = await fetch(base + "/raw?f=" + encodeURIComponent(secret)); // absolute path, real file
   assert.equal(r.status, 403);
   await srv.close();
+});
+
+test("createPreviewServer rejects when the port is already in use", async () => {
+  const a = await createPreviewServer({ root: fixture(), port: 0, idleMs: 50_000 });
+  await assert.rejects(
+    createPreviewServer({ root: fixture(), port: a.port, idleMs: 50_000 }),
+    /EADDRINUSE/
+  );
+  await a.close();
+});
+
+test("PORTS and MARKER are exported sensibly", () => {
+  assert.equal(PORTS[0], 7437);
+  assert.ok(MARKER.endsWith(".preview-server.json"));
 });
 
 test("server exits (via onIdleExit) after idle grace with no clients", async () => {
