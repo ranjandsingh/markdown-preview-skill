@@ -58,7 +58,7 @@ export function newestWatched(root) {
   return best;
 }
 
-// All watched *.md as { path, rel, mtime }, newest first (for the file dropdown).
+// All watched *.md as { path, rel, mtime }, newest first (for the sidebar tree).
 export function listWatched(root) {
   const out = [];
   for (const dir of resolveWatchDirs(root)) {
@@ -66,6 +66,32 @@ export function listWatched(root) {
       try { out.push({ path, rel: relative(root, path).split(sep).join("/"), mtime: statSync(path).mtimeMs }); }
       catch { /* skip */ }
     }
+  }
+  return out.sort((a, b) => b.mtime - a.mtime);
+}
+
+// Directory names never descended into by the all-scope scan, at any depth.
+export const IGNORED_DIRS = [
+  "node_modules", ".git", "dist", "build", "out", "coverage", "vendor", ".next", "target", ".claude",
+];
+
+function* walkMdIgnoring(dir) {
+  let entries;
+  try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return; }
+  for (const e of entries) {
+    const full = join(dir, e.name);
+    if (e.isDirectory()) { if (!IGNORED_DIRS.includes(e.name)) yield* walkMdIgnoring(full); }
+    else if (e.name.toLowerCase().endsWith(".md")) yield full;
+  }
+}
+
+// Every *.md under the project root (browse-all scope), skipping IGNORED_DIRS.
+// Same shape and order as listWatched.
+export function listAll(root) {
+  const out = [];
+  for (const path of walkMdIgnoring(resolve(root))) {
+    try { out.push({ path, rel: relative(root, path).split(sep).join("/"), mtime: statSync(path).mtimeMs }); }
+    catch { /* skip */ }
   }
   return out.sort((a, b) => b.mtime - a.mtime);
 }
