@@ -12,9 +12,21 @@ test("shell inlines vendored assets and the SSE client, with no baked markdown",
   assert.doesNotMatch(html, /text\/markdown/); // no baked <script type=text/markdown>
 });
 
-test("shell wires the file dropdown and ?file pin", () => {
+test("shell has the sidebar tree instead of the old dropdown", () => {
   const html = renderShell();
-  assert.match(html, /id="filepick"/);
-  assert.match(html, /\/raw\?f=/);
+  assert.match(html, /id="sidebar"/);
+  assert.match(html, /id="tree"/);
+  assert.match(html, /Auto — follow newest/);
+  assert.doesNotMatch(html, /id="filepick"/); // dropdown is gone
+});
+
+test("shell wires pinning, scopes, and persistence", () => {
+  const html = renderShell();
+  assert.match(html, /"\/raw"/);            // raw route wired
+  assert.match(html, /\?f=/);               // …with the file-pin query
   assert.match(html, /location\.search/);   // reads ?file= for initial pin
+  assert.match(html, /scope=all/);          // all-files scope wiring
+  assert.match(html, /id="scopetoggle"/);   // Watched / All files switch
+  assert.match(html, /localStorage/);       // sidebar/scope/folder persistence
+  assert.match(html, /id="sidebartoggle"/); // filebar ☰ button
 });

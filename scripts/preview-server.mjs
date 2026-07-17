@@ -14,6 +14,11 @@ function json(res, code, body) {
   res.end(JSON.stringify(body));
 }
 
+// Root-relative path with forward slashes — the client's tree keys on these.
+function posixRel(root, file) {
+  return file.replace(root + sep, "").split(sep).join("/");
+}
+
 // Is `target` inside one of the watch dirs? Resolves symlinks to prevent escape.
 function withinWatchDirs(root, target) {
   let real;
@@ -90,7 +95,7 @@ export function createPreviewServer({
       }
       if (!file) return json(res, 404, { error: "no document" });
       try {
-        return json(res, 200, { file: file.replace(root + sep, ""), markdown: readFileSync(file, "utf8") });
+        return json(res, 200, { file: posixRel(root, file), markdown: readFileSync(file, "utf8") });
       } catch { return json(res, 404, { error: "unreadable" }); }
     }
     if (url.pathname === "/events") {
@@ -117,7 +122,7 @@ export function createPreviewServer({
 
   function broadcast() {
     const best = newestWatched(root);
-    const payload = JSON.stringify({ file: best ? best.path.replace(root + sep, "") : null });
+    const payload = JSON.stringify({ file: best ? posixRel(root, best.path) : null });
     for (const res of clients) {
       if (res.destroyed || !res.writable) { clients.delete(res); continue; }
       try { res.write(`event: update\ndata: ${payload}\n\n`); } catch { clients.delete(res); }
