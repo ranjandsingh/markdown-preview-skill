@@ -17,9 +17,11 @@ node <skill-dir>/scripts/preview.mjs              # open on the newest watched d
 ```
 
 ## Automatic (Stop hook)
-`scripts/auto-preview.mjs` runs from a `Stop` hook. On each turn end it ensures the preview
-server is running and that exactly one browser tab is open; if a tab is already connected it
-does nothing — the server's file watcher already pushed the update over SSE. Enable it in
+`scripts/auto-preview.mjs` runs from a `Stop` hook. It acts only when a watched doc was
+**actually edited** since it last acted (freshness gate): then it ensures the preview server
+is running and one browser tab is open. Turns that touch no watched doc do nothing, and a
+deliberately closed tab stays closed until a doc changes again. If a tab is already
+connected, the server's file watcher already pushed the update over SSE. Enable it in
 `~/.claude/settings.json`:
 ```jsonc
 { "hooks": { "Stop": [ { "hooks": [

@@ -1,6 +1,6 @@
 # markdown-preview-skill
 
-**v0.3.0** · A Claude Code **skill** that renders your Markdown — specs, plans, ADRs, reviews —
+**v0.3.1** · A Claude Code **skill** that renders your Markdown — specs, plans, ADRs, reviews —
 into a styled HTML page (GitHub dark theme + real **Mermaid** diagrams) and keeps a **single
 browser tab live** as the docs change. **Fully offline**: a tiny `127.0.0.1` server and vendored
 `marked` + `mermaid`, no network.
@@ -60,8 +60,10 @@ the Stop hook to `~/.claude/settings.json`:
 
 ## Use
 
-**Automatic** — with the Stop hook installed, finishing a turn ensures the server is running and
-one tab is open; subsequent edits update that tab live.
+**Automatic** — with the Stop hook installed, finishing a turn that **edited a watched doc**
+ensures the server is running and one tab is open; subsequent edits update that tab live.
+Turns that touch no watched doc never open anything, and a tab you closed stays closed until
+a doc changes again (freshness gate).
 
 **On-demand:**
 ```
@@ -120,8 +122,8 @@ hooks/hooks.json         # Stop hook shipped with the plugin
 
 Packaged as a Claude Code plugin in a single-plugin marketplace, so others install it with the
 two `/plugin` commands above. Push to a public GitHub repo and tag the release
-(`git tag v0.3.0 && git push --tags`) so the plugin version and git tag match.
+(`git tag v0.3.1 && git push --tags`) so the plugin version and git tag match.
 
 ## Versioning
 
-See [CHANGELOG.md](CHANGELOG.md). This is **v0.3.0**.
+See [CHANGELOG.md](CHANGELOG.md). This is **v0.3.1**.

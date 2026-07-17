@@ -3,6 +3,13 @@
 All notable changes to this skill are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.3.1] — 2026-07-17
+### Changed
+- Stop hook now has a **freshness gate**: it only ensures the server + tab when a watched
+  doc actually changed since the hook last acted. Unrelated turns no longer open a tab, and
+  a deliberately closed tab stays closed until the next doc edit. State lives in
+  `.last-open.json` (gitignored) and self-prunes entries for deleted files.
+
 ## [0.3.0] — 2026-07-17
 ### Added
 - `npx` install path: `npx github:ranjandsingh/markdown-preview-skill` copies the skill into
