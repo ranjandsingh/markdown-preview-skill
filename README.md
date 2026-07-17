@@ -30,7 +30,15 @@ Ships the Stop hook automatically — no `settings.json` editing.
 2. `/plugin install markdown-preview@ranjan-skills`
 3. Restart Claude Code.
 
-### Via npx
+### Via the skills CLI ([skills.sh](https://skills.sh/))
+Works for Claude Code, Cursor, Codex, and any agent the CLI supports:
+```
+npx skills add ranjandsingh/markdown-preview-skill
+```
+> Installs the **skill only** (on-demand previews). For the automatic Stop hook, use the
+> plugin above or the installer below.
+
+### Via npx (installer with Stop hook)
 One shot, straight from GitHub — copies the skill into `~/.claude/skills/markdown-preview/`
 and registers the Stop hook in `~/.claude/settings.json` (idempotent):
 ```
