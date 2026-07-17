@@ -10,7 +10,7 @@ import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import { openInBrowser } from "./render.mjs";
-import { MARKER, PORTS } from "./preview-server.mjs";
+import { findServer } from "./preview-server.mjs";
 import { newestWatched } from "./watched.mjs";
 
 const SKILL_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -57,17 +57,6 @@ function projectCwd() {
   return process.cwd();
 }
 
-function readPort() {
-  try { return JSON.parse(readFileSync(MARKER, "utf8")).port; } catch { return PORTS[0]; }
-}
-
-async function health(port) {
-  try {
-    const r = await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(500) });
-    return r.ok ? await r.json() : null;
-  } catch { return null; }
-}
-
 async function main() {
   const root = projectCwd();
 
@@ -75,15 +64,19 @@ async function main() {
   const seen = readSeen();
   if (!isFresh(seen, newest)) return; // nothing was edited: leave the user's tabs alone
 
-  const port = readPort();
-  const action = decide(await health(port));
+  // Per-project servers: only a server whose root matches THIS project counts. A server
+  // for some other session's project is invisible here, so we never open its content.
+  let found = await findServer(root);
+  const action = decide(found ? found.health : null);
 
   if (action.spawn) {
     spawn(process.execPath, [SERVER_SCRIPT, root], { stdio: "ignore", detached: true }).unref();
-    await new Promise(r => setTimeout(r, 400)); // let it bind + write its marker
+    for (let i = 0; i < 8 && !found; i++) {          // let it pick a port and bind
+      await new Promise(r => setTimeout(r, 300));
+      found = await findServer(root);
+    }
   }
-  // After a fresh spawn the server has written the marker with its actual chosen port.
-  if (action.open) openInBrowser(`http://localhost:${action.spawn ? readPort() : port}`);
+  if (action.open && found) openInBrowser(`http://localhost:${found.port}`);
   writeSeen(seen, newest); // recorded even when a connected tab handled it via SSE
 }
 

@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
-import { createPreviewServer, PORTS, MARKER } from "../scripts/preview-server.mjs";
+import { createPreviewServer, findServer, PORTS, MARKER } from "../scripts/preview-server.mjs";
 
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), "mps-"));
@@ -27,11 +27,34 @@ test("GET / returns the shell page", async () => {
   await srv.close();
 });
 
-test("GET /health reports client count", async () => {
-  const { srv, base } = await start(fixture());
+test("GET /health reports client count and the served root", async () => {
+  const root = fixture();
+  const { srv, base } = await start(root);
   const j = await (await fetch(base + "/health")).json();
   assert.equal(j.clients, 0);
+  assert.equal(typeof j.root, "string");
+  assert.ok(j.root.length > 0);
   await srv.close();
+});
+
+test("findServer matches each project root to its own server", async () => {
+  const rootA = fixture();
+  const rootB = fixture();
+  const a = await createPreviewServer({ root: rootA, port: 0, idleMs: 50_000 });
+  const b = await createPreviewServer({ root: rootB, port: 0, idleMs: 50_000 });
+  const ports = [a.port, b.port];
+
+  const foundA = await findServer(rootA, ports);
+  assert.equal(foundA.port, a.port);
+  const foundB = await findServer(rootB, ports);
+  assert.equal(foundB.port, b.port);
+  assert.equal(typeof foundB.health.clients, "number");
+
+  const foundC = await findServer(mkdtempSync(join(tmpdir(), "mps-")), ports);
+  assert.equal(foundC, null); // no server for that root => caller must spawn one
+
+  await a.close();
+  await b.close();
 });
 
 test("GET /list returns watched markdown", async () => {

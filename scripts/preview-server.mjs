@@ -79,7 +79,7 @@ export function createPreviewServer({
     }
     const allScope = url.searchParams.get("scope") === "all";
     if (url.pathname === "/health") {
-      return json(res, 200, { clients: clients.size, allScope: allScopeClients.size, rootWatcher: !!rootWatcher });
+      return json(res, 200, { root, clients: clients.size, allScope: allScopeClients.size, rootWatcher: !!rootWatcher });
     }
     if (url.pathname === "/list") return json(res, 200, allScope ? listAll(root) : listWatched(root));
     if (url.pathname === "/raw") {
@@ -177,19 +177,60 @@ export function createPreviewServer({
 
 const SKILL_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export const MARKER = resolve(SKILL_DIR, ".preview-server.json");
-export const PORTS = [7437, 7438, 7439, 7440];
+export const PORTS = [7437, 7438, 7439, 7440, 7441, 7442, 7443, 7444];
+
+// Roots must compare equal across sessions that spell the same directory differently
+// (symlinks, 8.3 names, drive-letter case on Windows).
+function normRoot(p) {
+  let r = p;
+  try { r = realpathSync(p); } catch { /* keep as-is */ }
+  return process.platform === "win32" ? r.toLowerCase() : r;
+}
+
+// Each project root gets its own server. Probe the known ports and return
+// { port, health } for the server that serves `root`, or null if none does —
+// a server for a *different* root never matches, so sessions can't cross-see content.
+export async function findServer(root, ports = PORTS) {
+  const want = normRoot(resolve(root));
+  for (const port of ports) {
+    try {
+      const r = await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(400) });
+      if (!r.ok) continue;
+      const health = await r.json();
+      if (typeof health.root === "string" && normRoot(health.root) === want) return { port, health };
+    } catch { /* refused, timeout, not ours — try next */ }
+  }
+  return null;
+}
 
 async function tryListen(root, port) {
   try { return await createPreviewServer({ root, port }); }
   catch (e) { if (e && e.code === "EADDRINUSE") return null; throw e; }
 }
 
+// Best-effort hint map { normalizedRoot: { port, pid } } — discovery always goes through
+// findServer/health, so a stale marker can't point a session at the wrong project.
+function writeMarker(root, port) {
+  let map = {};
+  try {
+    const j = JSON.parse(readFileSync(MARKER, "utf8"));
+    if (j && typeof j === "object" && !j.port) map = j; // ignore the pre-0.6 single-server shape
+  } catch { /* start fresh */ }
+  map[normRoot(root)] = { port, pid: process.pid };
+  writeFileSync(MARKER, JSON.stringify(map));
+}
+
 // Run directly:  node scripts/preview-server.mjs [root]
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
   const root = process.argv[2] ? resolve(process.argv[2]) : process.cwd();
+  const existing = await findServer(root);
+  if (existing) {
+    console.log(`Preview server already on http://localhost:${existing.port} (watching ${root})`);
+    process.exit(0);
+  }
   let srv = null;
   for (const p of PORTS) { srv = await tryListen(root, p); if (srv) break; }
   if (!srv) { console.error("No free preview port"); process.exit(1); }
-  writeFileSync(MARKER, JSON.stringify({ port: srv.port, pid: process.pid, root }));
+  writeMarker(root, srv.port);
   console.log(`Preview server on http://localhost:${srv.port} (watching ${root})`);
 }

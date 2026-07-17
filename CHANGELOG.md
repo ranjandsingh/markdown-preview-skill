@@ -3,6 +3,16 @@
 All notable changes to this skill are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.6.0] — 2026-07-17
+### Fixed
+- **Per-project servers**: previously one global server (first session wins) served every
+  session, so a second project's preview showed the first project's content. Now each
+  project root gets its own server on its own port (`7437`–`7444`); the hook and previewer
+  discover the right server by asking each port's `/health` which root it serves, and spawn
+  a new one when this project has none. Same-root sessions still share one server; a server
+  self-exits ~60s after its tab closes, so memory stays bounded to actively previewed
+  projects.
+
 ## [0.5.0] — 2026-07-17
 ### Added
 - **In-markdown navigation**: GitHub-style heading ids make `#anchor` links work; relative

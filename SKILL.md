@@ -6,9 +6,11 @@ description: Render Markdown (specs, plans, ADRs, reviews) into a styled GitHub-
 # Markdown Preview
 
 Render Markdown to a live browser page with real Mermaid diagrams, fully offline. One
-persistent tab at `http://localhost:7437` follows the **newest watched doc** and updates
-**in place** over SSE — no new tabs, no flicker, scroll preserved. The server binds to
-`127.0.0.1` only and self-shuts-down ~60s after the tab closes.
+persistent tab **per project** follows the **newest watched doc** and updates **in place**
+over SSE — no new tabs, no flicker, scroll preserved. Each project root gets its own server
+(ports `7437`–`7444`; discovery matches the server to the project, so concurrent sessions in
+different projects never see each other's content). Servers bind to `127.0.0.1` only and
+self-shut-down ~60s after their tab closes.
 
 ## Navigation
 Links inside rendered markdown work like GitHub: `#anchor` links scroll to headings,
@@ -34,8 +36,8 @@ node <skill-dir>/scripts/preview.mjs              # open on the newest watched d
 
 ## Automatic (Stop hook)
 `scripts/auto-preview.mjs` runs from a `Stop` hook. It acts only when a watched doc was
-**actually edited** since it last acted (freshness gate): then it ensures the preview server
-is running and one browser tab is open. Turns that touch no watched doc do nothing, and a
+**actually edited** since it last acted (freshness gate): then it ensures **this project's**
+preview server is running and one browser tab is open. Turns that touch no watched doc do nothing, and a
 deliberately closed tab stays closed until a doc changes again. If a tab is already
 connected, the server's file watcher already pushed the update over SSE. Enable it in
 `~/.claude/settings.json`:

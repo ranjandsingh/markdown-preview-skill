@@ -1,6 +1,6 @@
 # markdown-preview-skill
 
-**v0.5.0** · A Claude Code **skill** that renders your Markdown — specs, plans, ADRs, reviews —
+**v0.6.0** · A Claude Code **skill** that renders your Markdown — specs, plans, ADRs, reviews —
 into a styled HTML page (GitHub dark theme + real **Mermaid** diagrams) and keeps a **single
 browser tab live** as the docs change. **Fully offline**: a tiny `127.0.0.1` server and vendored
 `marked` + `mermaid`, no network.
@@ -10,7 +10,9 @@ browser tab live** as the docs change. **Fully offline**: a tiny `127.0.0.1` ser
 
 ## What it does
 
-- **One persistent tab** at `http://localhost:7437`, showing the document currently under review.
+- **One persistent tab per project**, showing the document currently under review. Each
+  project root gets its own server (ports `7437`–`7444`, matched by root), so concurrent
+  sessions in different projects never see each other's content.
 - **Follows the workflow** — the tab tracks the *most recently modified* watched Markdown
   (spec → plan → ADR), switching content in the same tab.
 - **Sidebar file tree** — browse every markdown doc as a collapsible folder tree; click to pin
@@ -132,8 +134,8 @@ hooks/hooks.json         # Stop hook shipped with the plugin
 
 Packaged as a Claude Code plugin in a single-plugin marketplace, so others install it with the
 two `/plugin` commands above. Push to a public GitHub repo and tag the release
-(`git tag v0.5.0 && git push --tags`) so the plugin version and git tag match.
+(`git tag v0.6.0 && git push --tags`) so the plugin version and git tag match.
 
 ## Versioning
 
-See [CHANGELOG.md](CHANGELOG.md). This is **v0.5.0**.
+See [CHANGELOG.md](CHANGELOG.md). This is **v0.6.0**.
