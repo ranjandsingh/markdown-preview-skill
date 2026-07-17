@@ -1,27 +1,71 @@
-// Which markdown files count as "a spec/plan to review". Scoped to the superpowers
-// workflow for now (specs from brainstorming, plans from writing-plans). Widen later.
+// Which markdown files count as "a doc to review", and where they live.
+// Resolution order: built-in defaults -> project .markdown-preview.json (replaces) ->
+// MARKDOWN_PREVIEW_WATCH env (extends). Dirs are scanned recursively for the newest *.md.
 
-import { join } from "node:path";
-import { readdirSync, statSync, existsSync } from "node:fs";
+import { join, resolve, isAbsolute, relative, sep } from "node:path";
+import { readdirSync, statSync, existsSync, readFileSync } from "node:fs";
 
-export const WATCHED_DIRS = [
+export const DEFAULT_DIRS = [
   "docs/superpowers/specs",
   "docs/superpowers/plans",
+  "docs/adr",
 ];
 
-// Newest *.md across the watched dirs under `root`, or null. Returns { path, mtime }.
+function readConfig(root) {
+  const p = join(root, ".markdown-preview.json");
+  if (!existsSync(p)) return null;
+  try {
+    const j = JSON.parse(readFileSync(p, "utf8"));
+    return Array.isArray(j?.watch) ? j.watch : null;
+  } catch { return null; }
+}
+
+function envDirs() {
+  const raw = process.env.MARKDOWN_PREVIEW_WATCH;
+  return raw ? raw.split(",").map(s => s.trim()).filter(Boolean) : [];
+}
+
+// Absolute, deduped list of watch dirs for `root`.
+export function resolveWatchDirs(root) {
+  const base = readConfig(root) ?? DEFAULT_DIRS;
+  const all = [...base, ...envDirs()];
+  const abs = all.map(d => (isAbsolute(d) ? d : resolve(root, d)));
+  return [...new Set(abs)];
+}
+
+function* walkMd(dir) {
+  let entries;
+  try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return; }
+  for (const e of entries) {
+    const full = join(dir, e.name);
+    // Symlinked dirs are intentionally not followed: isDirectory() is false for
+    // symlinks (they report as isSymbolicLink()), avoiding loops and out-of-tree escapes.
+    if (e.isDirectory()) yield* walkMd(full);
+    else if (e.name.toLowerCase().endsWith(".md")) yield full;
+  }
+}
+
+// Newest *.md across the watch dirs, or null. Returns { path, mtime }.
 export function newestWatched(root) {
   let best = null;
-  for (const rel of WATCHED_DIRS) {
-    const dir = join(root, rel);
-    if (!existsSync(dir)) continue;
-    for (const name of readdirSync(dir)) {
-      if (!name.toLowerCase().endsWith(".md")) continue;
-      const path = join(dir, name);
+  for (const dir of resolveWatchDirs(root)) {
+    for (const path of walkMd(dir)) {
       let mtime;
       try { mtime = statSync(path).mtimeMs; } catch { continue; }
       if (!best || mtime > best.mtime) best = { path, mtime };
     }
   }
   return best;
+}
+
+// All watched *.md as { path, rel, mtime }, newest first (for the file dropdown).
+export function listWatched(root) {
+  const out = [];
+  for (const dir of resolveWatchDirs(root)) {
+    for (const path of walkMd(dir)) {
+      try { out.push({ path, rel: relative(root, path).split(sep).join("/"), mtime: statSync(path).mtimeMs }); }
+      catch { /* skip */ }
+    }
+  }
+  return out.sort((a, b) => b.mtime - a.mtime);
 }

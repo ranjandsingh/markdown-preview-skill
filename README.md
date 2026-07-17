@@ -1,36 +1,107 @@
 # markdown-preview-skill
 
-A Claude Code **skill** that renders a Markdown spec/plan/review into a styled HTML page
-(GitHub dark theme + rendered **Mermaid** diagrams) and opens it in the default browser —
-**fully offline** (vendored `marked` + `mermaid`).
+**v0.2.0** · A Claude Code **skill** that renders your Markdown — specs, plans, ADRs, reviews —
+into a styled HTML page (GitHub dark theme + real **Mermaid** diagrams) and keeps a **single
+browser tab live** as the docs change. **Fully offline**: a tiny `127.0.0.1` server and vendored
+`marked` + `mermaid`, no network.
 
-This repository is the **tracked source**. The working copy is installed at
-`~/.claude/skills/markdown-preview/` so the skill is available across all projects.
+> Replaces the v0.1.0 static-snapshot previewer. Instead of re-opening a new tab with a frozen
+> render each time, one tab now **updates in place** and **follows the newest watched doc**.
+
+## What it does
+
+- **One persistent tab** at `http://localhost:7437`, showing the document currently under review.
+- **Follows the workflow** — the tab tracks the *most recently modified* watched Markdown
+  (spec → plan → ADR), switching content in the same tab. A filebar dropdown lets you pin a
+  specific file.
+- **Updates in place over SSE** — only when a file actually changes. No new tabs, no full-page
+  reload, scroll position preserved, Mermaid re-rendered only on change.
+- **Self-cleaning** — the server shuts itself down ~60s after you close the tab. ~40 MB while
+  open, ~0% CPU idle.
+- **Offline & safe** — bound to `127.0.0.1` only; the raw-markdown route only serves files
+  inside your configured watch folders.
+
+## Install
+
+### As a plugin (recommended)
+Ships the Stop hook automatically — no `settings.json` editing.
+
+1. `/plugin marketplace add ranjandsingh/markdown-preview-skill`
+2. `/plugin install markdown-preview@ranjan-skills`
+3. Restart Claude Code.
+
+### Manual
+Copy `SKILL.md`, `scripts/`, and `assets/` into `~/.claude/skills/markdown-preview/`, then add
+the Stop hook to `~/.claude/settings.json`:
+```jsonc
+{ "hooks": { "Stop": [ { "hooks": [
+  { "type": "command",
+    "command": "node \"<skill-dir>/scripts/auto-preview.mjs\"" } ] } ] } }
+```
+
+## Use
+
+**Automatic** — with the Stop hook installed, finishing a turn ensures the server is running and
+one tab is open; subsequent edits update that tab live.
+
+**On-demand:**
+```
+node scripts/preview.mjs path/to/doc.md   # open the tab pinned to a specific file
+node scripts/preview.mjs                    # open the tab on the newest watched doc
+```
+
+## Configuration
+
+By default the server watches:
+```
+docs/superpowers/specs
+docs/superpowers/plans
+docs/adr
+```
+Override per project with `.markdown-preview.json` at the project root:
+```json
+{ "watch": ["docs/superpowers/specs", "docs/superpowers/plans", "docs/adr", "docs/design"] }
+```
+The `watch` list **replaces** the defaults. `MARKDOWN_PREVIEW_WATCH` (comma-separated) **extends**
+it for ad-hoc use. Paths are relative to the project root and scanned recursively.
+
+## How it works
+
+```
+Stop hook ── ensures ──► preview-server.mjs (127.0.0.1)
+   │                        ├─ GET /        shell page (vendored css/marked/mermaid + SSE client)
+   │  opens once            ├─ GET /events  SSE stream
+   ▼                        ├─ GET /raw     current/pinned doc's markdown (path-validated)
+ one browser tab ◄── SSE ───┤  GET /list    watched files (dropdown)
+   swaps #out in place      └─ fs.watch(watch dirs) → debounce → broadcast "update"
+                               idle-shutdown when no tab is connected
+```
+The page parses markdown with the already-loaded `marked`, so the rendering path (Mermaid
+fenced blocks, dark theme) matches the original skill exactly.
 
 ## Layout
 ```
-SKILL.md              # skill manifest (name + description triggers)
+SKILL.md                 # skill manifest (name + description triggers)
+CLAUDE.md                # repo rules for AI agents (commits, planning artifacts)
+.markdown-preview.json   # default watch config
 scripts/
-  render.mjs          # core: Markdown -> self-contained offline HTML -> open browser
-  watched.mjs         # which dirs count as specs/plans (superpowers-scoped for now)
-  preview.mjs         # on-demand CLI
-  auto-preview.mjs    # Stop-hook entrypoint (opens only the just-edited file)
-assets/               # vendored marked.min.js, mermaid.min.js, github-markdown-dark.css
-docs/
-  markdown-preview-skill-plan.md   # the design/plan for this skill
+  watched.mjs            # resolve watch dirs (config + env) and find newest / list docs
+  render.mjs             # render the shell page; open a URL in the browser
+  preview-server.mjs     # persistent offline server: routes, watcher, idle-shutdown
+  preview.mjs            # on-demand CLI (ensure server, open tab)
+  auto-preview.mjs       # Stop hook: ensure server + one tab
+assets/                  # vendored marked.min.js, mermaid.min.js, github-markdown-dark.css
+test/                    # node:test suites
+.claude-plugin/          # plugin + marketplace manifests (distribution)
+hooks/hooks.json         # Stop hook shipped with the plugin
 ```
 
-## Install / update the global copy
-Copy `SKILL.md`, `scripts/`, and `assets/` into `~/.claude/skills/markdown-preview/`, then
-add the `Stop` hook from `SKILL.md` to `~/.claude/settings.json`.
+## Publishing
 
-## Use
-```
-node scripts/preview.mjs path/to/spec.md   # render a specific file
-node scripts/preview.mjs                    # newest superpowers spec/plan in cwd
-```
+Packaged as a Claude Code plugin in a single-plugin marketplace, so others install it with the
+two `/plugin` commands above. Push to a public GitHub repo and tag the release
+(`git tag v0.2.0 && git push --tags`) so the plugin version and git tag match.
 
-## Behavior of the automatic open
-The `Stop` hook opens a watched file **only when it changed since it was last opened**, so it
-fires when you've just edited a spec/plan and are handing it over for review — not on every
-turn. State is tracked in `.last-open.json` (gitignored).
+## Versioning
+
+See [CHANGELOG.md](CHANGELOG.md). This is **v0.2.0**.

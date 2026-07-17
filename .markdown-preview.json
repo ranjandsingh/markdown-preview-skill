@@ -1,0 +1,7 @@
+{
+  "watch": [
+    "docs/superpowers/specs",
+    "docs/superpowers/plans",
+    "docs/adr"
+  ]
+}

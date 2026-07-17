@@ -1,0 +1,13 @@
+{
+  "name": "ranjan-skills",
+  "owner": {
+    "name": "Ranjan Singh"
+  },
+  "plugins": [
+    {
+      "name": "markdown-preview",
+      "source": "./",
+      "description": "Offline live-reload Markdown preview (GitHub dark + Mermaid)."
+    }
+  ]
+}

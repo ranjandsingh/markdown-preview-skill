@@ -1,43 +1,63 @@
 #!/usr/bin/env node
-// Stop-hook entrypoint. Intended to run when Claude finishes a turn (about to hand back
-// to the user). It opens the newest watched superpowers spec/plan in the browser ONLY IF
-// that file changed since it was last opened — i.e. it was the file just edited before the
-// review hand-off. Silent no-op otherwise. Never blocks; always exits 0.
+// Stop-hook entrypoint. Guarantees that an offline preview server and exactly one browser
+// tab exist. It never renders or re-opens redundantly: if a tab is already connected, the
+// server's watcher pushes updates over SSE, so this hook does nothing. Always exits 0.
 
+import { readFileSync } from "node:fs";
 import { join, dirname, resolve } from "node:path";
-import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { newestWatched } from "./watched.mjs";
-import { renderAndOpen } from "./render.mjs";
+import { spawn } from "node:child_process";
+import { openInBrowser } from "./render.mjs";
+import { MARKER, PORTS } from "./preview-server.mjs";
 
 const SKILL_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const MARKER = join(SKILL_DIR, ".last-open.json");
+const SERVER_SCRIPT = join(SKILL_DIR, "scripts", "preview-server.mjs");
+
+// Pure decision: given a /health response (or null if unreachable), what should we do?
+//   no server  -> spawn it and open a tab
+//   server, 0 connected tabs -> open a tab (the previous one was closed)
+//   server, >=1 connected tab -> nothing (SSE already pushes updates to it)
+export function decide(health) {
+  if (!health) return { spawn: true, open: true };
+  return { spawn: false, open: health.clients === 0 };
+}
 
 // Stop hooks receive a JSON payload on stdin that includes the project `cwd`.
 function projectCwd() {
   try {
     if (process.stdin.isTTY) return process.cwd();
     const raw = readFileSync(0, "utf8");
-    if (raw && raw.trim()) {
-      const j = JSON.parse(raw);
-      if (j && typeof j.cwd === "string") return j.cwd;
-    }
+    const j = raw && raw.trim() ? JSON.parse(raw) : null;
+    if (j && typeof j.cwd === "string") return j.cwd;
   } catch { /* ignore */ }
   return process.cwd();
 }
 
-const loadMarker = () => { try { return JSON.parse(readFileSync(MARKER, "utf8")); } catch { return {}; } };
-const saveMarker = (o) => { try { writeFileSync(MARKER, JSON.stringify(o)); } catch { /* ignore */ } };
+function readPort() {
+  try { return JSON.parse(readFileSync(MARKER, "utf8")).port; } catch { return PORTS[0]; }
+}
 
-try {
-  const best = newestWatched(projectCwd());
-  if (!best) process.exit(0);
+async function health(port) {
+  try {
+    const r = await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(500) });
+    return r.ok ? await r.json() : null;
+  } catch { return null; }
+}
 
-  const marker = loadMarker();
-  if (marker[best.path] && marker[best.path] >= best.mtime) process.exit(0); // unchanged → skip
+async function main() {
+  const root = projectCwd();
+  const port = readPort();
+  const action = decide(await health(port));
 
-  marker[best.path] = best.mtime;
-  saveMarker(marker);
-  renderAndOpen(best.path);
-} catch { /* never let a preview failure disrupt the session */ }
-process.exit(0);
+  if (action.spawn) {
+    spawn(process.execPath, [SERVER_SCRIPT, root], { stdio: "ignore", detached: true }).unref();
+    await new Promise(r => setTimeout(r, 400)); // let it bind + write its marker
+  }
+  // After a fresh spawn the server has written the marker with its actual chosen port.
+  if (action.open) openInBrowser(`http://localhost:${action.spawn ? readPort() : port}`);
+}
+
+// Only run when invoked directly (so importing `decide` in tests has no side effects).
+if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
+  main().catch(() => {}).finally(() => process.exit(0));
+}
