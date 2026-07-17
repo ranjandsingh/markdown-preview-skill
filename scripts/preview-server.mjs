@@ -7,7 +7,7 @@ import { readFileSync, realpathSync, watch, writeFileSync } from "node:fs";
 import { resolve, sep, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { renderShell } from "./render.mjs";
-import { resolveWatchDirs, newestWatched, listWatched } from "./watched.mjs";
+import { resolveWatchDirs, newestWatched, listWatched, listAll } from "./watched.mjs";
 
 function json(res, code, body) {
   res.writeHead(code, { "content-type": "application/json" });
@@ -25,6 +25,16 @@ function withinWatchDirs(root, target) {
   });
 }
 
+// All-scope containment: a real *.md inside the project root. The .md restriction matters
+// here — unlike the curated watch dirs, the root holds things like .env that must never
+// be served.
+function withinRoot(root, target) {
+  if (!target.toLowerCase().endsWith(".md")) return false;
+  let real, realRoot;
+  try { real = realpathSync(target); realRoot = realpathSync(root); } catch { return false; }
+  return real === realRoot || real.startsWith(realRoot + sep);
+}
+
 export function createPreviewServer({
   root,
   port = 7437,
@@ -32,6 +42,20 @@ export function createPreviewServer({
   onIdleExit = () => process.exit(0),
 }) {
   const clients = new Set();
+  const allScopeClients = new Set();
+
+  // Lazy root watcher: exists only while an all-scope tab is connected, so browse-all
+  // live-reload costs nothing when nobody uses it. No-op where recursive watch is
+  // unsupported (Linux) — the watched-dirs watcher/poll still runs.
+  let rootWatcher = null;
+  function syncRootWatcher() {
+    if (allScopeClients.size > 0 && !rootWatcher) {
+      try { rootWatcher = watch(root, { recursive: true }, scheduleBroadcast); } catch { rootWatcher = null; }
+    } else if (allScopeClients.size === 0 && rootWatcher) {
+      rootWatcher.close();
+      rootWatcher = null;
+    }
+  }
 
   // Self-shutdown: once the last tab disconnects, exit after `idleMs` so no orphan lingers.
   let idleTimer = null;
@@ -48,14 +72,18 @@ export function createPreviewServer({
         return res.end(renderShell());
       } catch { return json(res, 500, { error: "render failed" }); }
     }
-    if (url.pathname === "/health") return json(res, 200, { clients: clients.size });
-    if (url.pathname === "/list") return json(res, 200, listWatched(root));
+    const allScope = url.searchParams.get("scope") === "all";
+    if (url.pathname === "/health") {
+      return json(res, 200, { clients: clients.size, allScope: allScopeClients.size, rootWatcher: !!rootWatcher });
+    }
+    if (url.pathname === "/list") return json(res, 200, allScope ? listAll(root) : listWatched(root));
     if (url.pathname === "/raw") {
       const f = url.searchParams.get("f");
       let file;
       if (f) {
         const candidate = resolve(root, f);
-        if (!withinWatchDirs(root, candidate)) return json(res, 403, { error: "forbidden" });
+        const contained = allScope ? withinRoot(root, candidate) : withinWatchDirs(root, candidate);
+        if (!contained) return json(res, 403, { error: "forbidden" });
         file = candidate;
       } else {
         file = newestWatched(root)?.path;
@@ -74,7 +102,12 @@ export function createPreviewServer({
       res.write("event: ready\ndata: {}\n\n");
       clearTimeout(idleTimer);
       clients.add(res);
-      const drop = () => { clients.delete(res); armIdle(); };
+      if (allScope) { allScopeClients.add(res); syncRootWatcher(); }
+      const drop = () => {
+        clients.delete(res);
+        if (allScope) { allScopeClients.delete(res); syncRootWatcher(); }
+        armIdle();
+      };
       res.on("error", drop);
       req.on("close", drop);
       return;
@@ -123,6 +156,7 @@ export function createPreviewServer({
           clearTimeout(idleTimer);
           clearTimeout(debounce);
           if (pollTimer) clearInterval(pollTimer);
+          if (rootWatcher) { rootWatcher.close(); rootWatcher = null; }
           watchers.forEach(w => w.close());
           for (const c of clients) { try { c.end(); } catch { /* ignore */ } }
           clients.clear();

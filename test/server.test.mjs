@@ -88,6 +88,99 @@ test("server exits (via onIdleExit) after idle grace with no clients", async () 
   await srv.close();
 });
 
+// fixture() plus an .md outside the watch dirs (but inside the root) and one in node_modules.
+function fixtureAll() {
+  const root = fixture();
+  mkdirSync(join(root, "notes"), { recursive: true });
+  writeFileSync(join(root, "notes", "extra.md"), "# Extra");
+  mkdirSync(join(root, "node_modules", "pkg"), { recursive: true });
+  writeFileSync(join(root, "node_modules", "pkg", "README.md"), "# dep");
+  return root;
+}
+
+const recursiveWatch = process.platform !== "linux";
+
+function sse(base, path, ac) {
+  return fetch(base + path, { signal: ac.signal, headers: { accept: "text/event-stream" } });
+}
+
+test("GET /list?scope=all includes out-of-watch files; plain /list does not", async () => {
+  const { srv, base } = await start(fixtureAll());
+  const all = await (await fetch(base + "/list?scope=all")).json();
+  assert.ok(all.find(f => f.rel === "notes/extra.md"));
+  assert.ok(!all.find(f => f.rel.includes("node_modules")));
+  const watched = await (await fetch(base + "/list")).json();
+  assert.ok(!watched.find(f => f.rel === "notes/extra.md"));
+  await srv.close();
+});
+
+test("GET /raw scope=all serves in-root files, still rejects escapes", async () => {
+  const { srv, base } = await start(fixtureAll());
+  const ok = await fetch(base + "/raw?scope=all&f=" + encodeURIComponent("notes/extra.md"));
+  assert.equal(ok.status, 200);
+  assert.match((await ok.json()).markdown, /# Extra/);
+  const noScope = await fetch(base + "/raw?f=" + encodeURIComponent("notes/extra.md"));
+  assert.equal(noScope.status, 403);
+  const escape = await fetch(base + "/raw?scope=all&f=" + encodeURIComponent("../../etc/passwd"));
+  assert.equal(escape.status, 403);
+  await srv.close();
+});
+
+test("lazy root watcher attaches with an all-scope client and detaches after", async () => {
+  const { srv, base } = await start(fixtureAll());
+  let h = await (await fetch(base + "/health")).json();
+  assert.equal(h.allScope, 0);
+  assert.equal(h.rootWatcher, false);
+
+  const ac = new AbortController();
+  await sse(base, "/events?scope=all", ac);
+  await sleep(100);
+  h = await (await fetch(base + "/health")).json();
+  assert.equal(h.allScope, 1);
+  if (recursiveWatch) assert.equal(h.rootWatcher, true);
+
+  ac.abort();
+  const deadline = Date.now() + 2000;
+  while (Date.now() < deadline) {
+    h = await (await fetch(base + "/health")).json();
+    if (h.allScope === 0 && h.rootWatcher === false) break;
+    await sleep(50);
+  }
+  assert.equal(h.allScope, 0);
+  assert.equal(h.rootWatcher, false);
+  await srv.close();
+});
+
+test("editing an out-of-watch file pushes SSE update to an all-scope client", { skip: !recursiveWatch }, async () => {
+  const root = fixtureAll();
+  const srv = await createPreviewServer({ root, port: 0, idleMs: 50_000 });
+  const base = `http://127.0.0.1:${srv.port}`;
+
+  const events = [];
+  const ac = new AbortController();
+  const stream = await sse(base, "/events?scope=all", ac);
+  const reader = stream.body.getReader();
+  const pump = (async () => {
+    const dec = new TextDecoder();
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      events.push(dec.decode(value));
+    }
+  })();
+
+  await sleep(100);
+  writeFileSync(join(root, "notes", "extra.md"), "# Extra edited");
+  const deadline = Date.now() + 2000;
+  while (Date.now() < deadline && !events.join("").includes("event: update")) {
+    await sleep(50);
+  }
+  ac.abort();
+  await pump.catch(() => {});
+  assert.ok(events.join("").includes("event: update"));
+  await srv.close();
+});
+
 test("editing a watched file pushes an SSE update", async () => {
   const root = fixture();
   const srv = await createPreviewServer({ root, port: 0, idleMs: 50_000 });
