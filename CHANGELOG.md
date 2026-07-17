@@ -3,6 +3,12 @@
 All notable changes to this skill are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] — 2026-07-17
+### Added
+- `npx` install path: `npx github:ranjandsingh/markdown-preview-skill` copies the skill into
+  `~/.claude/skills/markdown-preview/` and registers the Stop hook in `settings.json`
+  (idempotent; `--uninstall` reverses both, touching only its own hook).
+
 ## [0.2.0] — 2026-06-11
 ### Changed
 - Replaced the static `file://` snapshot with an offline `127.0.0.1` live-reload server.

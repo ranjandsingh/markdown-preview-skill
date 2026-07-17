@@ -1,6 +1,6 @@
 # markdown-preview-skill
 
-**v0.2.0** · A Claude Code **skill** that renders your Markdown — specs, plans, ADRs, reviews —
+**v0.3.0** · A Claude Code **skill** that renders your Markdown — specs, plans, ADRs, reviews —
 into a styled HTML page (GitHub dark theme + real **Mermaid** diagrams) and keeps a **single
 browser tab live** as the docs change. **Fully offline**: a tiny `127.0.0.1` server and vendored
 `marked` + `mermaid`, no network.
@@ -29,6 +29,17 @@ Ships the Stop hook automatically — no `settings.json` editing.
 1. `/plugin marketplace add ranjandsingh/markdown-preview-skill`
 2. `/plugin install markdown-preview@ranjan-skills`
 3. Restart Claude Code.
+
+### Via npx
+One shot, straight from GitHub — copies the skill into `~/.claude/skills/markdown-preview/`
+and registers the Stop hook in `~/.claude/settings.json` (idempotent):
+```
+npx github:ranjandsingh/markdown-preview-skill
+```
+Uninstall (removes the skill dir and only its own hook):
+```
+npx github:ranjandsingh/markdown-preview-skill --uninstall
+```
 
 ### Manual
 Copy `SKILL.md`, `scripts/`, and `assets/` into `~/.claude/skills/markdown-preview/`, then add
@@ -90,6 +101,7 @@ scripts/
   preview-server.mjs     # persistent offline server: routes, watcher, idle-shutdown
   preview.mjs            # on-demand CLI (ensure server, open tab)
   auto-preview.mjs       # Stop hook: ensure server + one tab
+  install.mjs            # npx installer (copy skill + register hook; --uninstall)
 assets/                  # vendored marked.min.js, mermaid.min.js, github-markdown-dark.css
 test/                    # node:test suites
 .claude-plugin/          # plugin + marketplace manifests (distribution)
@@ -100,8 +112,8 @@ hooks/hooks.json         # Stop hook shipped with the plugin
 
 Packaged as a Claude Code plugin in a single-plugin marketplace, so others install it with the
 two `/plugin` commands above. Push to a public GitHub repo and tag the release
-(`git tag v0.2.0 && git push --tags`) so the plugin version and git tag match.
+(`git tag v0.3.0 && git push --tags`) so the plugin version and git tag match.
 
 ## Versioning
 
-See [CHANGELOG.md](CHANGELOG.md). This is **v0.2.0**.
+See [CHANGELOG.md](CHANGELOG.md). This is **v0.3.0**.
