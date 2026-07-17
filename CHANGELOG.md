@@ -3,6 +3,14 @@
 All notable changes to this skill are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.8.0] — 2026-07-17
+### Added
+- **Full-text search** (`/` to focus): case-insensitive word-AND matching over every
+  markdown file's content and path — always the whole project, independent of the sidebar
+  scope. Results rank filename hits first with up-to-5 highlighted snippet lines each
+  (capped at 50 files); clicking opens the doc with all matches marked and the clicked
+  occurrence centered. `Esc` clears back to the tree; results refresh live over SSE.
+
 ## [0.7.0] — 2026-07-17
 ### Added
 - **Clickable file mentions**: paths like `docs/plans/foo.md` written as inline code or

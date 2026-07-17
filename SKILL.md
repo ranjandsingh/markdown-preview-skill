@@ -1,6 +1,6 @@
 ---
 name: markdown-preview
-description: Render Markdown (specs, plans, ADRs, reviews) into a styled GitHub-dark HTML page with live-rendered Mermaid diagrams, served by a tiny offline localhost server so a single browser tab updates in place as the docs change. A sidebar file tree lets you browse and navigate every markdown doc in the project (watched folders or all files). Fully offline — vendored marked + mermaid, no network. Use after writing or revising a markdown spec/plan/review, or when the user asks to preview a markdown file, browse the project's markdown docs in the browser, or "see the plan visually". A Stop hook can keep the current doc live in the browser before a review hand-off.
+description: Render Markdown (specs, plans, ADRs, reviews) into a styled GitHub-dark HTML page with live-rendered Mermaid diagrams, served by a tiny offline localhost server so a single browser tab updates in place as the docs change. A sidebar file tree lets you browse and navigate every markdown doc in the project (watched folders or all files), and full-text search finds words across all markdown with highlighted, jump-to-match results. Fully offline — vendored marked + mermaid, no network. Use after writing or revising a markdown spec/plan/review, or when the user asks to preview a markdown file, browse or search the project's markdown docs in the browser, or "see the plan visually". A Stop hook can keep the current doc live in the browser before a review hand-off.
 ---
 
 # Markdown Preview
@@ -11,6 +11,13 @@ over SSE — no new tabs, no flicker, scroll preserved. Each project root gets i
 (ports `7437`–`7444`; discovery matches the server to the project, so concurrent sessions in
 different projects never see each other's content). Servers bind to `127.0.0.1` only and
 self-shut-down ~60s after their tab closes.
+
+## Search
+Press `/` (or click the sidebar box) and type — results replace the tree as you type:
+case-insensitive, all words must match (content or path), filename hits first, snippet
+lines with highlights. Search always covers **every** markdown file in the project,
+regardless of the Watched/All-files toggle. Clicking a result opens the doc with every
+match highlighted and scrolls to the clicked occurrence; `Esc` clears back to the tree.
 
 ## Navigation
 Links inside rendered markdown work like GitHub: `#anchor` links scroll to headings,

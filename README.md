@@ -1,6 +1,6 @@
 # markdown-preview-skill
 
-**v0.7.0** · A Claude Code **skill** that renders your Markdown — specs, plans, ADRs, reviews —
+**v0.8.0** · A Claude Code **skill** that renders your Markdown — specs, plans, ADRs, reviews —
 into a styled HTML page (GitHub dark theme + real **Mermaid** diagrams) and keeps a **single
 browser tab live** as the docs change. **Fully offline**: a tiny `127.0.0.1` server and vendored
 `marked` + `mermaid`, no network.
@@ -30,6 +30,10 @@ browser tab live** as the docs change. **Fully offline**: a tiny `127.0.0.1` ser
 - **Clickable file mentions** — a path like `docs/plans/foo.md` written as inline code or
   plain text becomes a link when that file actually exists (resolved from the project root
   or the current doc's folder). No markdown link syntax required.
+- **Full-text search** — press `/` and type; all-words matching across every markdown file's
+  content and path (always the whole project), filename hits ranked first, snippet previews
+  with highlights. Click a result to open the doc with matches highlighted and the clicked
+  occurrence scrolled into view; `Esc` returns to the tree.
 - **Self-cleaning** — the server shuts itself down ~60s after you close the tab. ~40 MB while
   open, ~0% CPU idle.
 - **Offline & safe** — bound to `127.0.0.1` only; the raw-markdown route serves only files
@@ -109,6 +113,7 @@ Stop hook ── ensures ──► preview-server.mjs (127.0.0.1)
    │  opens once            ├─ GET /events  SSE stream (?scope=all ⇒ lazy root watcher)
    ▼                        ├─ GET /raw     current/pinned doc's markdown (path-validated)
  one browser tab ◄── SSE ───┤  GET /list    watched files, or ?scope=all for the whole project
+   search + tree sidebar    ├─ GET /search  word-AND full-text over all project markdown
    sidebar tree + #out      └─ fs.watch(watch dirs) → debounce → broadcast "update"
    swap in place               idle-shutdown when no tab is connected
 ```
@@ -137,8 +142,8 @@ hooks/hooks.json         # Stop hook shipped with the plugin
 
 Packaged as a Claude Code plugin in a single-plugin marketplace, so others install it with the
 two `/plugin` commands above. Push to a public GitHub repo and tag the release
-(`git tag v0.7.0 && git push --tags`) so the plugin version and git tag match.
+(`git tag v0.8.0 && git push --tags`) so the plugin version and git tag match.
 
 ## Versioning
 
-See [CHANGELOG.md](CHANGELOG.md). This is **v0.7.0**.
+See [CHANGELOG.md](CHANGELOG.md). This is **v0.8.0**.
