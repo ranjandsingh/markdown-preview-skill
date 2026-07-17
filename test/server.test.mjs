@@ -215,6 +215,60 @@ test("editing an out-of-watch file pushes SSE update to an all-scope client", { 
   await srv.close();
 });
 
+// Files crafted for /search tests.
+function fixtureSearch() {
+  const root = mkdtempSync(join(tmpdir(), "mps-"));
+  writeFileSync(join(root, ".markdown-preview.json"), JSON.stringify({ watch: ["docs"] }));
+  mkdirSync(join(root, "docs", "adr"), { recursive: true });
+  writeFileSync(join(root, "docs", "adr", "ports.md"), "intro line\nthe port marker lives here\n");
+  mkdirSync(join(root, "guides"), { recursive: true });
+  writeFileSync(join(root, "guides", "port-marker-guide.md"), "nothing relevant\n");
+  mkdirSync(join(root, "notes"), { recursive: true });
+  writeFileSync(join(root, "notes", "extra.md"), "marker only\n");
+  mkdirSync(join(root, "node_modules", "pkg"), { recursive: true });
+  writeFileSync(join(root, "node_modules", "pkg", "README.md"), "port marker\n");
+  return root;
+}
+
+test("search: word-AND over content+path, nameHit ranks first, ignored dirs excluded", async () => {
+  const { srv, base } = await start(fixtureSearch());
+  const { results } = await (await fetch(base + "/search?q=" + encodeURIComponent("port marker"))).json();
+  const rels = results.map(r => r.rel);
+  assert.deepEqual(rels, ["guides/port-marker-guide.md", "docs/adr/ports.md"]);
+  assert.equal(results[0].nameHit, true);   // both words in the path alone
+  assert.equal(results[1].nameHit, false);
+  const snip = results[1].snippets[0];
+  assert.equal(snip.line, 2);
+  assert.match(snip.text, /port marker/);
+  assert.ok(!rels.some(r => r.includes("node_modules")));
+  assert.ok(!rels.includes("notes/extra.md")); // has "marker" but not "port"
+  await srv.close();
+});
+
+test("search: snippets capped at 5 with occurrence indexes for the first word", async () => {
+  const root = fixtureSearch();
+  writeFileSync(join(root, "zoo.md"),
+    "zebra a\nplain\nzebra b zebra\nzebra c\nzebra d\nzebra e\nzebra f\n");
+  const { srv, base } = await start(root);
+  const { results } = await (await fetch(base + "/search?q=zebra")).json();
+  const f = results.find(r => r.rel === "zoo.md");
+  assert.equal(f.snippets.length, 5);
+  assert.deepEqual(f.snippets.map(s => s.line), [1, 3, 4, 5, 6]);
+  assert.deepEqual(f.snippets.map(s => s.occ), [0, 1, 3, 4, 5]); // line 3 holds two zebras
+  await srv.close();
+});
+
+test("search: results capped at 50, empty query returns none", async () => {
+  const root = fixtureSearch();
+  for (let i = 0; i < 60; i++) writeFileSync(join(root, `cap-${i}.md`), "capword here\n");
+  const { srv, base } = await start(root);
+  const { results } = await (await fetch(base + "/search?q=capword")).json();
+  assert.equal(results.length, 50);
+  const empty = await (await fetch(base + "/search?q=" + encodeURIComponent("  "))).json();
+  assert.deepEqual(empty.results, []);
+  await srv.close();
+});
+
 test("editing a watched file pushes an SSE update", async () => {
   const root = fixture();
   const srv = await createPreviewServer({ root, port: 0, idleMs: 50_000 });

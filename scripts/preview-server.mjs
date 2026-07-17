@@ -3,7 +3,7 @@
 // (SSE + watcher: Task 5. Idle-shutdown: Task 6. CLI entry: Task 7.)
 
 import http from "node:http";
-import { readFileSync, realpathSync, watch, writeFileSync } from "node:fs";
+import { readFileSync, realpathSync, statSync, watch, writeFileSync } from "node:fs";
 import { resolve, sep, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { renderShell } from "./render.mjs";
@@ -38,6 +38,47 @@ function withinRoot(root, target) {
   let real, realRoot;
   try { real = realpathSync(target); realRoot = realpathSync(root); } catch { return false; }
   return real === realRoot || real.startsWith(realRoot + sep);
+}
+
+// Full-text search over every project .md (always all-scope): case-insensitive word-AND
+// across content + rel path. Filename hits rank first, then newest. Fresh scan per request
+// — the corpus is small and the client debounces; no index to keep coherent.
+const SEARCH_MAX_RESULTS = 50;
+const SEARCH_MAX_SNIPPETS = 5;
+const SEARCH_MAX_BYTES = 2 * 1024 * 1024;
+
+export function searchAll(root, q) {
+  const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return { results: [], skipped: 0 };
+  const results = [];
+  let skipped = 0;
+  for (const f of listAll(root)) {
+    try { if (statSync(f.path).size > SEARCH_MAX_BYTES) { skipped++; continue; } } catch { continue; }
+    let content;
+    try { content = readFileSync(f.path, "utf8"); } catch { continue; }
+    const relLower = f.rel.toLowerCase();
+    const hay = content.toLowerCase() + "\n" + relLower;
+    if (!words.every(w => hay.includes(w))) continue;
+    const nameHit = words.every(w => relLower.includes(w));
+
+    // Snippets: first N matching lines. `occ` counts occurrences of the FIRST query word
+    // strictly above the line — the client scrolls to the occ-th highlight mark.
+    const lines = content.split(/\r?\n/);
+    const first = words[0];
+    const snippets = [];
+    let occBefore = 0;
+    for (let i = 0; i < lines.length && snippets.length < SEARCH_MAX_SNIPPETS; i++) {
+      const lower = lines[i].toLowerCase();
+      if (words.some(w => lower.includes(w))) {
+        snippets.push({ line: i + 1, text: lines[i], occ: occBefore });
+      }
+      let idx = 0;
+      while ((idx = lower.indexOf(first, idx)) !== -1) { occBefore++; idx += first.length; }
+    }
+    results.push({ rel: f.rel, mtime: f.mtime, nameHit, snippets });
+  }
+  results.sort((a, b) => (b.nameHit - a.nameHit) || (b.mtime - a.mtime));
+  return { results: results.slice(0, SEARCH_MAX_RESULTS), skipped };
 }
 
 export function createPreviewServer({
@@ -82,6 +123,7 @@ export function createPreviewServer({
       return json(res, 200, { root, clients: clients.size, allScope: allScopeClients.size, rootWatcher: !!rootWatcher });
     }
     if (url.pathname === "/list") return json(res, 200, allScope ? listAll(root) : listWatched(root));
+    if (url.pathname === "/search") return json(res, 200, searchAll(root, url.searchParams.get("q") || ""));
     if (url.pathname === "/raw") {
       const f = url.searchParams.get("f");
       let file;
