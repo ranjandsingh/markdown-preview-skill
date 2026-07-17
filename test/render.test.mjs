@@ -20,6 +20,16 @@ test("shell has the sidebar tree instead of the old dropdown", () => {
   assert.doesNotMatch(html, /id="filepick"/); // dropdown is gone
 });
 
+test("shell wires full-text search", () => {
+  const html = renderShell();
+  assert.match(html, /id="search"/);        // sidebar search box
+  assert.match(html, /id="results"/);       // results panel
+  assert.match(html, /\/search\?q=/);       // server endpoint wiring
+  assert.match(html, /highlightMatches/);   // in-doc match highlighting
+  assert.match(html, /Escape/);             // Esc clears back to the tree
+  assert.match(html, /200\)/);              // debounced input
+});
+
 test("shell makes file-path mentions clickable", () => {
   const html = renderShell();
   assert.match(html, /linkifyFileRefs/);   // mention scanner present

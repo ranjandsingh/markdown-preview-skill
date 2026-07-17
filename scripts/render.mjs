@@ -59,6 +59,19 @@ export function renderShell() {
   .filelink { color:#2f81f7; cursor:pointer; text-decoration:underline dotted; text-underline-offset:3px; }
   .filelink:hover { text-decoration:underline; }
   a.filelink { color:#2f81f7; }
+  #search { margin:0 2px 8px; background:#0d1117; color:#c9d1d9; border:1px solid #30363d;
+            border-radius:6px; padding:5px 8px; font:inherit; width:calc(100% - 4px);
+            box-sizing:border-box; }
+  #search:focus { outline:none; border-color:#2f81f7; }
+  #results { flex:1 1 auto; display:none; }
+  .rhead { padding:4px 8px; margin-top:6px; color:#c9d1d9; font-weight:600; cursor:pointer;
+           border-radius:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .rhead:hover { background:#161b22; }
+  .rsnip { padding:2px 8px 2px 18px; color:#8b949e; cursor:pointer; border-radius:6px;
+           white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .rsnip:hover { background:#161b22; }
+  #results mark, .hit { background:#9e6a03; color:#fff; border-radius:2px; padding:0 1px; }
+  .noresults { padding:8px; color:#484f58; }
 </style>
 <script>${markedJs}</script>
 <script>${mermaidJs}</script>
@@ -69,8 +82,10 @@ export function renderShell() {
 </div>
 <div class="layout">
   <nav id="sidebar">
+    <input id="search" type="search" placeholder="Search docs…  ( / )" autocomplete="off" spellcheck="false">
     <div id="auto" class="item auto" title="Follow the most recently modified doc">&#9889; Auto — follow newest</div>
     <div id="tree"></div>
+    <div id="results"></div>
     <div class="scopebar">
       <button id="scopetoggle" title="Switch between the configured watch folders and every markdown file in the project"></button>
     </div>
@@ -200,17 +215,148 @@ export function renderShell() {
     });
   }
 
+  // --- full-text search ---------------------------------------------------------------
+
+  var searchBox = document.getElementById("search");
+  var searchWords = [];
+  var pendingSearch = null; // { words, occ } — set by a result click, consumed on render
+  var searchTimer = null;
+
+  function tokenize(q) { return q.toLowerCase().split(/\\s+/).filter(Boolean); }
+
+  // Append text to el with query-word matches wrapped in <mark>.
+  function markText(el, text, words) {
+    var lower = text.toLowerCase();
+    var ranges = [];
+    words.forEach(function (w) {
+      var i = 0;
+      while ((i = lower.indexOf(w, i)) !== -1) { ranges.push([i, i + w.length]); i += w.length; }
+    });
+    ranges.sort(function (a, b) { return a[0] - b[0]; });
+    var last = 0;
+    ranges.forEach(function (r) {
+      if (r[0] < last) return; // overlap from another word
+      el.appendChild(document.createTextNode(text.slice(last, r[0])));
+      var m = document.createElement("mark");
+      m.textContent = text.slice(r[0], r[1]);
+      el.appendChild(m);
+      last = r[1];
+    });
+    el.appendChild(document.createTextNode(text.slice(last)));
+  }
+
+  // Wrap query-word matches in the rendered doc with <mark class="hit">.
+  function highlightMatches(words) {
+    var walker = document.createTreeWalker(document.getElementById("out"), NodeFilter.SHOW_TEXT);
+    var nodes = [];
+    while (walker.nextNode()) {
+      var n = walker.currentNode;
+      var p = n.parentElement, skip = false;
+      while (p) {
+        var t = p.tagName;
+        if (t === "SCRIPT" || t === "STYLE" || t === "MARK" || t === "svg" || t === "SVG") { skip = true; break; }
+        if (p.id === "out") break;
+        p = p.parentElement;
+      }
+      if (skip) continue;
+      var lower = n.nodeValue.toLowerCase();
+      if (words.some(function (w) { return lower.indexOf(w) !== -1; })) nodes.push(n);
+    }
+    nodes.forEach(function (node) {
+      var span = document.createElement("span");
+      markText(span, node.nodeValue, words);
+      span.querySelectorAll("mark").forEach(function (m) { m.className = "hit"; });
+      node.parentNode.replaceChild(span, node);
+    });
+  }
+
+  function openHit(rel, occ) {
+    pendingSearch = { words: searchWords.slice(), occ: occ };
+    if (rel !== (pinned || showing)) pin(rel);
+    else loadDoc(pinned || rel);
+  }
+
+  function runSearch(q) {
+    var words = tokenize(q);
+    searchWords = words;
+    var resBox = document.getElementById("results");
+    var tree = document.getElementById("tree");
+    if (!words.length) {
+      resBox.style.display = "none";
+      resBox.textContent = "";
+      tree.style.display = "";
+      loadDoc(pinned); // one clean re-render clears in-doc highlights
+      return;
+    }
+    fetch("/search?q=" + encodeURIComponent(q)).then(function (r) { return r.json(); }).then(function (data) {
+      if (tokenize(searchBox.value).join(" ") !== words.join(" ")) return; // stale response
+      resBox.textContent = "";
+      tree.style.display = "none";
+      resBox.style.display = "block";
+      if (!data.results.length) {
+        var d = document.createElement("div");
+        d.className = "noresults";
+        d.textContent = "No matches";
+        resBox.appendChild(d);
+        return;
+      }
+      data.results.forEach(function (f) {
+        var h = document.createElement("div");
+        h.className = "rhead";
+        h.title = f.rel;
+        markText(h, f.rel, words);
+        h.addEventListener("click", function () { openHit(f.rel, f.snippets.length ? f.snippets[0].occ : 0); });
+        resBox.appendChild(h);
+        f.snippets.forEach(function (s) {
+          var el = document.createElement("div");
+          el.className = "rsnip";
+          el.title = f.rel + ":" + s.line;
+          markText(el, s.text.trim(), words);
+          el.addEventListener("click", function () { openHit(f.rel, s.occ); });
+          resBox.appendChild(el);
+        });
+      });
+    });
+  }
+
+  searchBox.addEventListener("input", function () {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(function () { runSearch(searchBox.value); }, 200);
+  });
+  searchBox.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") { searchBox.value = ""; runSearch(""); searchBox.blur(); }
+  });
+  document.addEventListener("keydown", function (e) {
+    var tag = document.activeElement && document.activeElement.tagName;
+    if (e.key === "/" && tag !== "INPUT" && tag !== "TEXTAREA" && tag !== "SELECT") {
+      e.preventDefault();
+      searchBox.focus();
+    }
+  });
+
   function renderMarkdown(md, newDoc) {
     var main = document.getElementById("main");
     var y = main.scrollTop;
     document.getElementById("out").innerHTML = marked.parse(md);
     addHeadingIds();
     linkifyFileRefs();
-    // settle runs twice (sync, then after mermaid reflows layout) — capture the hash so
-    // the second pass re-scrolls to the anchor instead of resetting to the top.
+    if (searchBox.value.trim()) highlightMatches(tokenize(searchBox.value));
+    // settle runs twice (sync, then after mermaid reflows layout) — capture hash/search so
+    // the second pass re-scrolls to the target instead of resetting to the top.
     var hash = pendingHash;
     pendingHash = "";
+    var searchCtx = pendingSearch;
+    pendingSearch = null;
     var settle = function () {
+      if (searchCtx && searchCtx.words.length) {
+        var first = searchCtx.words[0];
+        var hits = [];
+        document.querySelectorAll("#out mark.hit").forEach(function (m) {
+          if (m.textContent.toLowerCase() === first) hits.push(m);
+        });
+        var target = hits[searchCtx.occ] || hits[0];
+        if (target) { target.scrollIntoView({ block: "center" }); return; }
+      }
       if (hash) {
         var t = document.getElementById(hash.slice(1));
         if (t) { t.scrollIntoView(); return; }
@@ -356,6 +502,7 @@ export function renderShell() {
     es.addEventListener("update", function () {
       refreshRels();
       refreshList();
+      if (searchBox.value.trim()) runSearch(searchBox.value); // results stay fresh
       loadDoc(pinned); // reload whatever is showing — pinned docs live-update too
     });
     es.onopen = function () { refreshRels(); refreshList(); loadDoc(pinned); };
