@@ -26,7 +26,7 @@ browser tab live** as the docs change. **Fully offline**: a tiny `127.0.0.1` ser
 ### As a plugin (recommended)
 Ships the Stop hook automatically — no `settings.json` editing.
 
-1. `/plugin marketplace add <your-github-user>/markdown-preview-skill`
+1. `/plugin marketplace add ranjandsingh/markdown-preview-skill`
 2. `/plugin install markdown-preview@ranjan-skills`
 3. Restart Claude Code.
 
@@ -105,4 +105,3 @@ two `/plugin` commands above. Push to a public GitHub repo and tag the release
 ## Versioning
 
 See [CHANGELOG.md](CHANGELOG.md). This is **v0.2.0**.
-```
