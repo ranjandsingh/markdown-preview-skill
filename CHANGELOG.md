@@ -3,6 +3,15 @@
 All notable changes to this skill are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.7.0] — 2026-07-17
+### Added
+- **Clickable file mentions**: paths like `docs/plans/foo.md` written as inline code or
+  plain text become navigable links when the file exists in the project — validated against
+  the live file list, resolved root-relative first, then relative to the current doc.
+### Changed
+- The all-files scan now skips **every dot-folder** (`.git`, `.claude`, `.venv`, `.vscode`,
+  …) plus `venv` and `__pycache__`, in addition to the existing build/dependency dirs.
+
 ## [0.6.0] — 2026-07-17
 ### Fixed
 - **Per-project servers**: previously one global server (first session wins) served every

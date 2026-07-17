@@ -1,6 +1,6 @@
 {
   "name": "markdown-preview",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Offline live-reload Markdown preview (GitHub dark + Mermaid) that follows your specs, plans, and ADRs in one browser tab.",
   "author": {
     "name": "Ranjan Singh"

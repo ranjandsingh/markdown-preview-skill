@@ -88,6 +88,16 @@ test("listAll skips ignored directories at any depth", () => {
   assert.deepEqual(rels, ["keep.md"]);
 });
 
+test("listAll skips every dot-folder by default", () => {
+  const root = tmpRoot();
+  write(join(root, "keep.md"));
+  write(join(root, ".claude", "skills", "notes.md"));
+  write(join(root, ".vscode", "tips.md"));
+  write(join(root, "src", ".hidden", "deep.md"));
+  const rels = listAll(root).map(f => f.rel);
+  assert.deepEqual(rels, ["keep.md"]);
+});
+
 test("listAll uses posix rels and newest-first order", () => {
   const root = tmpRoot();
   write(join(root, "a", "old.md"), "# old", new Date("2020-01-01"));

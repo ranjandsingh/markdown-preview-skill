@@ -70,9 +70,10 @@ export function listWatched(root) {
   return out.sort((a, b) => b.mtime - a.mtime);
 }
 
-// Directory names never descended into by the all-scope scan, at any depth.
+// Directory names never descended into by the all-scope scan, at any depth. Dot-folders
+// (.git, .claude, .vscode, …) are all skipped by the walk itself.
 export const IGNORED_DIRS = [
-  "node_modules", ".git", "dist", "build", "out", "coverage", "vendor", ".next", "target", ".claude",
+  "node_modules", "dist", "build", "out", "coverage", "vendor", "target", "venv", "__pycache__",
 ];
 
 function* walkMdIgnoring(dir) {
@@ -80,8 +81,9 @@ function* walkMdIgnoring(dir) {
   try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return; }
   for (const e of entries) {
     const full = join(dir, e.name);
-    if (e.isDirectory()) { if (!IGNORED_DIRS.includes(e.name)) yield* walkMdIgnoring(full); }
-    else if (e.name.toLowerCase().endsWith(".md")) yield full;
+    if (e.isDirectory()) {
+      if (!e.name.startsWith(".") && !IGNORED_DIRS.includes(e.name)) yield* walkMdIgnoring(full);
+    } else if (e.name.toLowerCase().endsWith(".md")) yield full;
   }
 }
 

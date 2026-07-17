@@ -15,9 +15,11 @@ self-shut-down ~60s after their tab closes.
 ## Navigation
 Links inside rendered markdown work like GitHub: `#anchor` links scroll to headings,
 relative links to other `.md` files open in the same tab (cross-doc anchors like
-`other.md#section` land on the heading), and external links open a new tab. The URL always
-reflects the current doc (`?file=…`), so previews are shareable and back/forward navigate
-your reading history.
+`other.md#section` land on the heading), and external links open a new tab. Plain
+**mentions** of markdown files — a path in inline code or bare text like
+`docs/plans/foo.md` — also become clickable when the file exists. The URL always reflects
+the current doc (`?file=…`), so previews are shareable and back/forward navigate your
+reading history.
 
 ## Sidebar file tree
 A collapsible sidebar (☰ to toggle) shows a folder tree of the project's markdown. Click a

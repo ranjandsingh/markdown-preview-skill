@@ -56,6 +56,9 @@ export function renderShell() {
   #scopetoggle { width:100%; background:#161b22; color:#c9d1d9; border:1px solid #30363d;
                  border-radius:6px; padding:5px 8px; cursor:pointer; font:inherit; }
   #scopetoggle:hover { border-color:#8b949e; }
+  .filelink { color:#2f81f7; cursor:pointer; text-decoration:underline dotted; text-underline-offset:3px; }
+  .filelink:hover { text-decoration:underline; }
+  a.filelink { color:#2f81f7; }
 </style>
 <script>${markedJs}</script>
 <script>${mermaidJs}</script>
@@ -89,6 +92,7 @@ export function renderShell() {
   var scope = localStorage.getItem("mp.scope") === "all" ? "all" : "watched";
   var showing = "";   // rel of the doc currently rendered (for highlight in Auto mode)
   var pendingHash = location.hash || "";
+  var allRels = null; // Set of every .md rel in the project — validates file-path mentions
   var es = null;
 
   if (localStorage.getItem("mp.sidebar") === "0") document.body.classList.add("nosidebar");
@@ -109,11 +113,99 @@ export function renderShell() {
     }
   }
 
+  // --- clickable file mentions -------------------------------------------------------
+  // Paths like docs/plans/foo.md written as inline code or plain text become navigable,
+  // but only when the path actually exists in the project (validated against /list).
+
+  var PATH_RE = /(?:\\.{1,2}\\/)?(?:[\\w.-]+\\/)*[\\w.-]+\\.md/gi;
+
+  function refreshRels() {
+    fetch("/list?scope=all").then(function (r) { return r.json(); }).then(function (files) {
+      allRels = {};
+      files.forEach(function (f) { allRels[f.rel] = 1; });
+      linkifyFileRefs(); // first /raw render may have beaten this fetch — re-run
+    });
+  }
+
+  // Resolve a mentioned path against the project root, then against the current doc's dir.
+  function resolveMention(token) {
+    if (!allRels) return null;
+    var clean = token.replace(/^\\.\\//, "");
+    if (clean.charAt(0) !== "." && allRels[clean]) return clean;
+    var parts = (showing || "").split("/").slice(0, -1);
+    token.split("/").forEach(function (seg) {
+      if (seg === "" || seg === ".") return;
+      if (seg === "..") parts.pop();
+      else parts.push(seg);
+    });
+    var docRel = parts.join("/");
+    return allRels[docRel] ? docRel : null;
+  }
+
+  function markLink(el, rel) {
+    el.classList.add("filelink");
+    el.setAttribute("data-rel", rel);
+    el.title = rel;
+  }
+
+  function linkifyFileRefs() {
+    if (!allRels) return;
+    // inline code spans whose entire text is an existing .md path
+    var codes = document.querySelectorAll("#out code:not([data-rel])");
+    for (var i = 0; i < codes.length; i++) {
+      var c = codes[i];
+      if (c.parentElement && c.parentElement.tagName === "PRE") continue;
+      var txt = c.textContent.trim();
+      PATH_RE.lastIndex = 0;
+      var m = PATH_RE.exec(txt);
+      if (!m || m[0] !== txt) continue;
+      var rel = resolveMention(txt);
+      if (rel) markLink(c, rel);
+    }
+    // bare paths in plain text
+    var walker = document.createTreeWalker(document.getElementById("out"), NodeFilter.SHOW_TEXT);
+    var nodes = [];
+    while (walker.nextNode()) {
+      var n = walker.currentNode;
+      var p = n.parentElement;
+      var skip = false;
+      while (p) {
+        var t = p.tagName;
+        if (t === "A" || t === "CODE" || t === "PRE" || t === "SCRIPT" || t === "STYLE" || t === "MARK") { skip = true; break; }
+        if (p.id === "out") break;
+        p = p.parentElement;
+      }
+      if (!skip && PATH_RE.test(n.nodeValue)) nodes.push(n);
+      PATH_RE.lastIndex = 0;
+    }
+    nodes.forEach(function (node) {
+      var text = node.nodeValue;
+      var frag = document.createDocumentFragment();
+      var last = 0, m2;
+      PATH_RE.lastIndex = 0;
+      while ((m2 = PATH_RE.exec(text))) {
+        var rel = resolveMention(m2[0]);
+        if (!rel) continue;
+        frag.appendChild(document.createTextNode(text.slice(last, m2.index)));
+        var a = document.createElement("a");
+        a.textContent = m2[0];
+        a.href = docUrl(rel);
+        markLink(a, rel);
+        frag.appendChild(a);
+        last = m2.index + m2[0].length;
+      }
+      if (last === 0) return;
+      frag.appendChild(document.createTextNode(text.slice(last)));
+      node.parentNode.replaceChild(frag, node);
+    });
+  }
+
   function renderMarkdown(md, newDoc) {
     var main = document.getElementById("main");
     var y = main.scrollTop;
     document.getElementById("out").innerHTML = marked.parse(md);
     addHeadingIds();
+    linkifyFileRefs();
     // settle runs twice (sync, then after mermaid reflows layout) — capture the hash so
     // the second pass re-scrolls to the anchor instead of resetting to the top.
     var hash = pendingHash;
@@ -174,6 +266,12 @@ export function renderShell() {
   // relative *.md links pin the target doc in place; external links open a new tab so
   // the live preview tab survives.
   document.getElementById("out").addEventListener("click", function (e) {
+    var fl = e.target && e.target.closest ? e.target.closest("[data-rel]") : null;
+    if (fl) {
+      e.preventDefault();
+      pin(fl.getAttribute("data-rel"));
+      return;
+    }
     var a = e.target && e.target.closest ? e.target.closest("a") : null;
     if (!a) return;
     var href = a.getAttribute("href") || "";
@@ -256,10 +354,11 @@ export function renderShell() {
     if (es) es.close();
     es = new EventSource("/events" + scopeQs("?"));
     es.addEventListener("update", function () {
+      refreshRels();
       refreshList();
       loadDoc(pinned); // reload whatever is showing — pinned docs live-update too
     });
-    es.onopen = function () { refreshList(); loadDoc(pinned); };
+    es.onopen = function () { refreshRels(); refreshList(); loadDoc(pinned); };
   }
 
   document.getElementById("auto").addEventListener("click", function () { pin(""); });

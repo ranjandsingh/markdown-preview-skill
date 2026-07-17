@@ -20,6 +20,14 @@ test("shell has the sidebar tree instead of the old dropdown", () => {
   assert.doesNotMatch(html, /id="filepick"/); // dropdown is gone
 });
 
+test("shell makes file-path mentions clickable", () => {
+  const html = renderShell();
+  assert.match(html, /linkifyFileRefs/);   // mention scanner present
+  assert.match(html, /data-rel/);          // mentions carry their resolved rel
+  assert.match(html, /filelink/);          // styled as links
+  assert.match(html, /scope=all/);         // validated against the full project file list
+});
+
 test("shell wires in-markdown navigation", () => {
   const html = renderShell();
   assert.match(html, /addHeadingIds/);      // #anchor targets generated
