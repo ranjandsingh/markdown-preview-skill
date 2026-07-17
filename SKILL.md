@@ -1,6 +1,6 @@
 ---
 name: markdown-preview
-description: Render Markdown (specs, plans, ADRs, reviews) into a styled GitHub-dark HTML page with live-rendered Mermaid diagrams, served by a tiny offline localhost server so a single browser tab updates in place as the docs change. Fully offline — vendored marked + mermaid, no network. Use after writing or revising a markdown spec/plan/review, or when the user asks to preview a markdown file, open it in the browser, or "see the plan visually". A Stop hook can keep the current doc live in the browser before a review hand-off.
+description: Render Markdown (specs, plans, ADRs, reviews) into a styled GitHub-dark HTML page with live-rendered Mermaid diagrams, served by a tiny offline localhost server so a single browser tab updates in place as the docs change. A sidebar file tree lets you browse and navigate every markdown doc in the project (watched folders or all files). Fully offline — vendored marked + mermaid, no network. Use after writing or revising a markdown spec/plan/review, or when the user asks to preview a markdown file, browse the project's markdown docs in the browser, or "see the plan visually". A Stop hook can keep the current doc live in the browser before a review hand-off.
 ---
 
 # Markdown Preview
@@ -9,6 +9,15 @@ Render Markdown to a live browser page with real Mermaid diagrams, fully offline
 persistent tab at `http://localhost:7437` follows the **newest watched doc** and updates
 **in place** over SSE — no new tabs, no flicker, scroll preserved. The server binds to
 `127.0.0.1` only and self-shuts-down ~60s after the tab closes.
+
+## Sidebar file tree
+A collapsible sidebar (☰ to toggle) shows a folder tree of the project's markdown. Click a
+file to pin it; click **⚡ Auto — follow newest** to resume following the latest edit. The
+footer switches scope: **Watched** (configured folders) or **All files** (every `.md` in the
+project, skipping `node_modules`, `.git`, build dirs). Pinned docs live-reload too; in
+All-files scope the server watches the whole project root while such a tab is connected
+(macOS/Windows; Linux live-reload covers watched dirs only). Sidebar visibility, folder
+open state, and scope persist per browser.
 
 ## On demand
 ```

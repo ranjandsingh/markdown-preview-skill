@@ -1,6 +1,6 @@
 # markdown-preview-skill
 
-**v0.3.1** · A Claude Code **skill** that renders your Markdown — specs, plans, ADRs, reviews —
+**v0.4.0** · A Claude Code **skill** that renders your Markdown — specs, plans, ADRs, reviews —
 into a styled HTML page (GitHub dark theme + real **Mermaid** diagrams) and keeps a **single
 browser tab live** as the docs change. **Fully offline**: a tiny `127.0.0.1` server and vendored
 `marked` + `mermaid`, no network.
@@ -12,14 +12,20 @@ browser tab live** as the docs change. **Fully offline**: a tiny `127.0.0.1` ser
 
 - **One persistent tab** at `http://localhost:7437`, showing the document currently under review.
 - **Follows the workflow** — the tab tracks the *most recently modified* watched Markdown
-  (spec → plan → ADR), switching content in the same tab. A filebar dropdown lets you pin a
-  specific file.
+  (spec → plan → ADR), switching content in the same tab.
+- **Sidebar file tree** — browse every markdown doc as a collapsible folder tree; click to pin
+  a file, click **⚡ Auto** to follow the newest again. A footer toggle switches between the
+  **Watched** folders and **All files** (every `.md` in the project, minus `node_modules`,
+  `.git`, and build dirs). Sidebar visibility, folder state, and scope persist per browser.
 - **Updates in place over SSE** — only when a file actually changes. No new tabs, no full-page
-  reload, scroll position preserved, Mermaid re-rendered only on change.
+  reload, scroll position preserved, Mermaid re-rendered only on change. Pinned docs
+  live-reload too; All-files scope live-reloads via a lazy whole-project watcher
+  (macOS/Windows).
 - **Self-cleaning** — the server shuts itself down ~60s after you close the tab. ~40 MB while
   open, ~0% CPU idle.
-- **Offline & safe** — bound to `127.0.0.1` only; the raw-markdown route only serves files
-  inside your configured watch folders.
+- **Offline & safe** — bound to `127.0.0.1` only; the raw-markdown route serves only files
+  inside your configured watch folders (or, in All-files scope, only `.md` files inside the
+  project root — never `.env` or anything else).
 
 ## Install
 
@@ -91,11 +97,11 @@ it for ad-hoc use. Paths are relative to the project root and scanned recursivel
 ```
 Stop hook ── ensures ──► preview-server.mjs (127.0.0.1)
    │                        ├─ GET /        shell page (vendored css/marked/mermaid + SSE client)
-   │  opens once            ├─ GET /events  SSE stream
+   │  opens once            ├─ GET /events  SSE stream (?scope=all ⇒ lazy root watcher)
    ▼                        ├─ GET /raw     current/pinned doc's markdown (path-validated)
- one browser tab ◄── SSE ───┤  GET /list    watched files (dropdown)
-   swaps #out in place      └─ fs.watch(watch dirs) → debounce → broadcast "update"
-                               idle-shutdown when no tab is connected
+ one browser tab ◄── SSE ───┤  GET /list    watched files, or ?scope=all for the whole project
+   sidebar tree + #out      └─ fs.watch(watch dirs) → debounce → broadcast "update"
+   swap in place               idle-shutdown when no tab is connected
 ```
 The page parses markdown with the already-loaded `marked`, so the rendering path (Mermaid
 fenced blocks, dark theme) matches the original skill exactly.
@@ -122,8 +128,8 @@ hooks/hooks.json         # Stop hook shipped with the plugin
 
 Packaged as a Claude Code plugin in a single-plugin marketplace, so others install it with the
 two `/plugin` commands above. Push to a public GitHub repo and tag the release
-(`git tag v0.3.1 && git push --tags`) so the plugin version and git tag match.
+(`git tag v0.4.0 && git push --tags`) so the plugin version and git tag match.
 
 ## Versioning
 
-See [CHANGELOG.md](CHANGELOG.md). This is **v0.3.1**.
+See [CHANGELOG.md](CHANGELOG.md). This is **v0.4.0**.

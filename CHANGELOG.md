@@ -3,6 +3,18 @@
 All notable changes to this skill are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] — 2026-07-17
+### Added
+- **Sidebar file tree**: browse the project's markdown as a collapsible folder tree; click to
+  pin, **⚡ Auto** to follow the newest. Visibility, folder state, and scope persist in
+  `localStorage`. Replaces the filebar dropdown.
+- **All-files scope**: a footer toggle switches from the watched folders to every `.md` in the
+  project (skipping `node_modules`, `.git`, and build dirs). While an All-files tab is
+  connected, a lazy recursive watcher on the project root makes those docs live-reload too
+  (macOS/Windows).
+### Fixed
+- Pinned documents now live-reload on change; previously only Auto mode did.
+
 ## [0.3.1] — 2026-07-17
 ### Changed
 - Stop hook now has a **freshness gate**: it only ensures the server + tab when a watched
