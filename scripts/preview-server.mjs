@@ -87,8 +87,11 @@ export function createPreviewServer({
       let file;
       if (f) {
         const candidate = resolve(root, f);
-        const contained = allScope ? withinRoot(root, candidate) : withinWatchDirs(root, candidate);
-        if (!contained) return json(res, 403, { error: "forbidden" });
+        // Watch-dir files OR any in-root *.md: markdown links may point outside the watch
+        // dirs (e.g. ../../README.md), and those must load in every scope.
+        if (!withinWatchDirs(root, candidate) && !withinRoot(root, candidate)) {
+          return json(res, 403, { error: "forbidden" });
+        }
         file = candidate;
       } else {
         file = newestWatched(root)?.path;

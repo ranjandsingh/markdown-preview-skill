@@ -95,6 +95,7 @@ function fixtureAll() {
   writeFileSync(join(root, "notes", "extra.md"), "# Extra");
   mkdirSync(join(root, "node_modules", "pkg"), { recursive: true });
   writeFileSync(join(root, "node_modules", "pkg", "README.md"), "# dep");
+  writeFileSync(join(root, ".env"), "SECRET=1");
   return root;
 }
 
@@ -114,15 +115,25 @@ test("GET /list?scope=all includes out-of-watch files; plain /list does not", as
   await srv.close();
 });
 
-test("GET /raw scope=all serves in-root files, still rejects escapes", async () => {
+test("GET /raw serves any in-root .md regardless of scope, still rejects escapes", async () => {
   const { srv, base } = await start(fixtureAll());
-  const ok = await fetch(base + "/raw?scope=all&f=" + encodeURIComponent("notes/extra.md"));
-  assert.equal(ok.status, 200);
-  assert.match((await ok.json()).markdown, /# Extra/);
+  const withScope = await fetch(base + "/raw?scope=all&f=" + encodeURIComponent("notes/extra.md"));
+  assert.equal(withScope.status, 200);
+  assert.match((await withScope.json()).markdown, /# Extra/);
+  // md-links can point outside the watch dirs — /raw allows in-root .md without scope too
   const noScope = await fetch(base + "/raw?f=" + encodeURIComponent("notes/extra.md"));
-  assert.equal(noScope.status, 403);
+  assert.equal(noScope.status, 200);
   const escape = await fetch(base + "/raw?scope=all&f=" + encodeURIComponent("../../etc/passwd"));
   assert.equal(escape.status, 403);
+  await srv.close();
+});
+
+test("GET /raw never serves non-markdown root files like .env", async () => {
+  const { srv, base } = await start(fixtureAll());
+  for (const qs of ["f=.env", "scope=all&f=.env"]) {
+    const r = await fetch(base + "/raw?" + qs);
+    assert.equal(r.status, 403, qs);
+  }
   await srv.close();
 });
 

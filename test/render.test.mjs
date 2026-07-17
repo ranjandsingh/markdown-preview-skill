@@ -20,6 +20,16 @@ test("shell has the sidebar tree instead of the old dropdown", () => {
   assert.doesNotMatch(html, /id="filepick"/); // dropdown is gone
 });
 
+test("shell wires in-markdown navigation", () => {
+  const html = renderShell();
+  assert.match(html, /addHeadingIds/);      // #anchor targets generated
+  assert.match(html, /scrollIntoView/);     // anchor + cross-doc hash scrolling
+  assert.match(html, /closest/);            // delegated link click handler
+  assert.match(html, /window\.open/);       // external links → new tab
+  assert.match(html, /pushState/);          // pins update the URL
+  assert.match(html, /popstate/);           // back/forward navigates docs
+});
+
 test("shell wires pinning, scopes, and persistence", () => {
   const html = renderShell();
   assert.match(html, /"\/raw"/);            // raw route wired

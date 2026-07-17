@@ -3,6 +3,15 @@
 All notable changes to this skill are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] — 2026-07-17
+### Added
+- **In-markdown navigation**: GitHub-style heading ids make `#anchor` links work; relative
+  links to `.md` files navigate in place (with `other.md#section` support); external links
+  open a new tab. `/raw` now serves any in-root `.md` regardless of scope so cross-folder
+  links resolve (non-markdown files like `.env` remain forbidden).
+- **URL sync + history**: the pinned doc is reflected in `?file=…` via `pushState`, making
+  previews shareable; browser back/forward move through previously viewed docs.
+
 ## [0.4.0] — 2026-07-17
 ### Added
 - **Sidebar file tree**: browse the project's markdown as a collapsible folder tree; click to

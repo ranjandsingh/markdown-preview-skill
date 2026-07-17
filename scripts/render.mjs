@@ -88,18 +88,45 @@ export function renderShell() {
   var pinned = new URLSearchParams(location.search).get("file") || "";
   var scope = localStorage.getItem("mp.scope") === "all" ? "all" : "watched";
   var showing = "";   // rel of the doc currently rendered (for highlight in Auto mode)
+  var pendingHash = location.hash || "";
   var es = null;
 
   if (localStorage.getItem("mp.sidebar") === "0") document.body.classList.add("nosidebar");
 
   function scopeQs(prefix) { return scope === "all" ? prefix + "scope=all" : ""; }
 
-  function renderMarkdown(md) {
+  // marked emits headings without ids — add GitHub-style slugs so #anchor links work.
+  function addHeadingIds() {
+    var used = {};
+    var hs = document.querySelectorAll("#out h1,#out h2,#out h3,#out h4,#out h5,#out h6");
+    for (var i = 0; i < hs.length; i++) {
+      if (hs[i].id) continue;
+      var slug = hs[i].textContent.trim().toLowerCase()
+        .replace(/[^\\w\\- ]+/g, "").replace(/ +/g, "-");
+      var n = used[slug] || 0;
+      used[slug] = n + 1;
+      hs[i].id = n ? slug + "-" + n : slug;
+    }
+  }
+
+  function renderMarkdown(md, newDoc) {
     var main = document.getElementById("main");
     var y = main.scrollTop;
     document.getElementById("out").innerHTML = marked.parse(md);
-    mermaid.run({ querySelector: ".mermaid" }).then(function () { main.scrollTop = y; });
-    main.scrollTop = y;
+    addHeadingIds();
+    // settle runs twice (sync, then after mermaid reflows layout) — capture the hash so
+    // the second pass re-scrolls to the anchor instead of resetting to the top.
+    var hash = pendingHash;
+    pendingHash = "";
+    var settle = function () {
+      if (hash) {
+        var t = document.getElementById(hash.slice(1));
+        if (t) { t.scrollIntoView(); return; }
+      }
+      main.scrollTop = newDoc ? 0 : y;
+    };
+    mermaid.run({ querySelector: ".mermaid" }).then(settle);
+    settle();
   }
 
   function highlight() {
@@ -115,18 +142,60 @@ export function renderShell() {
     var url = "/raw" + (rel ? "?f=" + encodeURIComponent(rel) + scopeQs("&") : scopeQs("?"));
     fetch(url).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
       if (!d) return;
+      var newDoc = d.file !== showing;
       showing = d.file;
       document.getElementById("label").textContent = d.file;
-      renderMarkdown(d.markdown);
+      renderMarkdown(d.markdown, newDoc);
       highlight();
     });
   }
 
-  function pin(rel) {
+  function docUrl(rel, hash) {
+    return (rel ? "/?file=" + encodeURIComponent(rel) : "/") + (hash || "");
+  }
+
+  function pin(rel, hash, skipHistory) {
     pinned = rel;
+    if (hash) pendingHash = hash;
+    if (!skipHistory) history.pushState({ rel: rel }, "", docUrl(rel, hash));
     loadDoc(pinned); // "" => server's current newest
     highlight();
   }
+
+  // Back/forward move between previously pinned docs.
+  window.addEventListener("popstate", function (e) {
+    var rel = (e.state && typeof e.state.rel === "string")
+      ? e.state.rel
+      : (new URLSearchParams(location.search).get("file") || "");
+    pin(rel, location.hash || "", true);
+  });
+
+  // Links inside the rendered markdown: #anchors scroll natively (ids added above);
+  // relative *.md links pin the target doc in place; external links open a new tab so
+  // the live preview tab survives.
+  document.getElementById("out").addEventListener("click", function (e) {
+    var a = e.target && e.target.closest ? e.target.closest("a") : null;
+    if (!a) return;
+    var href = a.getAttribute("href") || "";
+    if (!href || href.charAt(0) === "#") return;
+    if (/^[a-z][a-z0-9+.-]*:/i.test(href) || href.slice(0, 2) === "//") {
+      e.preventDefault();
+      window.open(a.href, "_blank");
+      return;
+    }
+    e.preventDefault();
+    var cut = href.indexOf("#");
+    var path = cut === -1 ? href : href.slice(0, cut);
+    var hash = cut === -1 ? "" : href.slice(cut);
+    if (!/\\.md$/i.test(path)) return; // only markdown targets are navigable
+    var base = (showing || "").split("/").slice(0, -1);
+    path.split("/").forEach(function (seg) {
+      if (seg === "" || seg === ".") return;
+      if (seg === "..") base.pop();
+      else base.push(seg);
+    });
+    pin(base.join("/"), hash);
+  });
 
   function buildTree(files) {
     var rootNode = { dirs: {}, files: [] };
@@ -207,6 +276,7 @@ export function renderShell() {
     localStorage.setItem("mp.sidebar", hidden ? "0" : "1");
   });
 
+  history.replaceState({ rel: pinned }, "", docUrl(pinned, location.hash));
   renderScopeToggle();
   connect();
 })();

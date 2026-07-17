@@ -10,6 +10,13 @@ persistent tab at `http://localhost:7437` follows the **newest watched doc** and
 **in place** over SSE — no new tabs, no flicker, scroll preserved. The server binds to
 `127.0.0.1` only and self-shuts-down ~60s after the tab closes.
 
+## Navigation
+Links inside rendered markdown work like GitHub: `#anchor` links scroll to headings,
+relative links to other `.md` files open in the same tab (cross-doc anchors like
+`other.md#section` land on the heading), and external links open a new tab. The URL always
+reflects the current doc (`?file=…`), so previews are shareable and back/forward navigate
+your reading history.
+
 ## Sidebar file tree
 A collapsible sidebar (☰ to toggle) shows a folder tree of the project's markdown. Click a
 file to pin it; click **⚡ Auto — follow newest** to resume following the latest edit. The

@@ -1,6 +1,6 @@
 # markdown-preview-skill
 
-**v0.4.0** · A Claude Code **skill** that renders your Markdown — specs, plans, ADRs, reviews —
+**v0.5.0** · A Claude Code **skill** that renders your Markdown — specs, plans, ADRs, reviews —
 into a styled HTML page (GitHub dark theme + real **Mermaid** diagrams) and keeps a **single
 browser tab live** as the docs change. **Fully offline**: a tiny `127.0.0.1` server and vendored
 `marked` + `mermaid`, no network.
@@ -21,6 +21,10 @@ browser tab live** as the docs change. **Fully offline**: a tiny `127.0.0.1` ser
   reload, scroll position preserved, Mermaid re-rendered only on change. Pinned docs
   live-reload too; All-files scope live-reloads via a lazy whole-project watcher
   (macOS/Windows).
+- **In-markdown navigation** — `#anchor` links scroll to headings (GitHub-style ids are
+  generated), relative links to other `.md` files open in place (including `other.md#section`),
+  and external links open a new tab so the live preview survives. Every doc gets a shareable
+  `?file=` URL and the browser back/forward buttons walk your reading history.
 - **Self-cleaning** — the server shuts itself down ~60s after you close the tab. ~40 MB while
   open, ~0% CPU idle.
 - **Offline & safe** — bound to `127.0.0.1` only; the raw-markdown route serves only files
@@ -128,8 +132,8 @@ hooks/hooks.json         # Stop hook shipped with the plugin
 
 Packaged as a Claude Code plugin in a single-plugin marketplace, so others install it with the
 two `/plugin` commands above. Push to a public GitHub repo and tag the release
-(`git tag v0.4.0 && git push --tags`) so the plugin version and git tag match.
+(`git tag v0.5.0 && git push --tags`) so the plugin version and git tag match.
 
 ## Versioning
 
-See [CHANGELOG.md](CHANGELOG.md). This is **v0.4.0**.
+See [CHANGELOG.md](CHANGELOG.md). This is **v0.5.0**.
